@@ -830,3 +830,46 @@ table.grid.lib thead th{box-shadow:0 1px 0 var(--line)}
 @media (min-width:1181px) and (min-height:640px){
   .main.lib-fill .preview{position:relative;top:0;max-height:none;height:100%}
 }
+
+/* ---------- biblioteca: janela de trabalho compacta ----------
+   Em notebooks e navegador nao maximizado, a tabela e a prioridade. A faixa
+   de resumo permanece completa, mas deixa de ocupar duas linhas antes dela. */
+@media (min-width:901px) and (max-width:1180px) and (max-height:820px){
+  .main{padding:16px 20px 14px}
+  .main.lib-fill{height:calc(100vh - var(--top-h));padding-bottom:12px}
+  .page-head{margin:0 0 12px;gap:10px}
+  .eyebrow{margin-bottom:4px;font-size:10.5px}
+  .page-head h1{font-size:28px}
+  .page-head p{margin-top:4px;font-size:14px}
+  .ph-tools{gap:8px}
+  .search input,#viewsBtn{height:42px}
+
+  .kpi-strip{grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:12px}
+  .kpi{display:block;min-height:94px;padding:12px 14px}
+  .kpi-ic{display:none}
+  .kpi+.kpi::before,.kpi:nth-child(3)::before{display:block;top:12px;bottom:12px}
+  .kpi:nth-child(n+3){border-top:0}
+  .kpi-l{font-size:12px}
+  .kpi strong{font-size:22px;margin:1px 0}
+  .kpi em{font-size:12px}
+  .kpi-act{position:static;margin-top:3px}
+  .kpi-act .link-btn{font-size:12px}
+
+  .filter-row{gap:8px;margin-bottom:10px}
+  .filter-row .btn,.fchip{height:38px}
+  .res-head{min-height:50px;padding:8px 14px}
+  .res-head h2{font-size:16px}
+  .tool{height:32px;padding:0 8px;font-size:13px}
+  .vt-foot{padding:7px 14px}
+  table.grid.lib tbody tr[data-id] td{height:62px}
+  table.grid.lib.compact tbody tr[data-id] td{height:54px}
+}
+
+@media (min-width:901px) and (max-width:1180px) and (max-height:680px){
+  .page-head{margin-bottom:8px}
+  .page-head p{display:none}
+  .kpi{min-height:76px;padding:10px 12px}
+  .kpi em{display:none}
+  .filter-row{margin-bottom:8px}
+  table.grid.lib tbody tr[data-id] td{height:56px}
+}
