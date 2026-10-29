@@ -1,0 +1,11 @@
+# Base local de relatorios e copias de seguranca: nao publicar no repositorio.
+/2026/
+
+# Artefatos locais e copias antigas do painel.
+/painel/*.bak
+/painel/*ANTIGO*.html
+
+# Arquivos do sistema.
+Thumbs.db
+Desktop.ini
+.DS_Store
