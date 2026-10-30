@@ -28,7 +28,6 @@ function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.ad
 
 const ICON = {
   table: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M3 12h18M3 19h18"/></svg>',
-  scatter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="15" r="2"/><circle cx="12" cy="8" r="2"/><circle cx="17" cy="13" r="2"/><path d="M3 3v18h18"/></svg>',
   heat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
   back: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>',
@@ -198,9 +197,11 @@ const PRESETS = [
 const emptyFilters = () => ({ q: '', a: [], tf: [], hb: [], days: [], take: [], pts: [], per: [], perFrom: '', perTo: '', ranges: {}, params: {}, pos: false, favs: false, prop: false });
 const S = Object.assign({
   filters: emptyFilters(), sort: [['plp', -1]], preset: '', view: 'table', cols: DEFAULT_COLS, page: 0, pageSize: 10, focus: null,
-  heatMetric: 'best', scX: 'ddb', scY: 'plp', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false,
+  heatMetric: 'best', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false,
 }, store.get('state', {}));
 S.filters = Object.assign(emptyFilters(), S.filters);
+// Normaliza preferencias antigas para uma visualizacao ainda disponivel.
+if (!['table', 'heat'].includes(S.view)) S.view = 'table';
 if (S.colsVer !== COLS_VER) { S.cols = [...DEFAULT_COLS]; S.colsVer = COLS_VER; S.pageSize = 10; }
 S.cols = S.cols.filter(k => COLS.some(c => c.k === k));
 const favs = new Set(store.get('favs', []));
@@ -209,7 +210,7 @@ let cmpAlign = store.get('cmpAlign', 'date');
 let cmpScale = store.get('cmpScale', 'pct');
 let views = store.get('views', []);
 const PROP = Object.assign({ target: 10, daily: 5, total: 10, cons: '' }, store.get('prop', {}));
-const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, scX: S.scX, scY: S.scY, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, navMini: S.navMini });
+const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, navMini: S.navMini });
 const propRuleText = () => `lucro ≥ ${nf(PROP.target, 0)}% · pior dia > −${nf(PROP.daily, 0)}% · DD capital inicial < ${nf(PROP.total, 0)}%${PROP.cons !== '' ? ` · melhor dia ≤ ${PROP.cons}% do lucro` : ''}`;
 
 const propPass = r => isNum(r.plp) && r.plp >= PROP.target && (!isNum(r.worstDay) || r.worstDay > -PROP.daily) && isNum(r.ddb) && r.ddb < PROP.total && (PROP.cons === '' || !isNum(r.bestDayShare) || r.bestDayShare <= Number(PROP.cons));
@@ -608,7 +609,6 @@ function renderLib() {
     <section class="filter-row rise">
       <div class="seg view-seg" id="viewSeg" role="tablist" aria-label="Visualização">
         <button data-view="table" role="tab">${ICON.table}<span>Tabela</span></button>
-        <button data-view="scatter" role="tab">${ICON.scatter}<span>Dispersão</span></button>
         <button data-view="heat" role="tab">${ICON.heat}<span>Mapa de calor</span></button>
       </div>
       <button class="btn outline" id="sideBtn" aria-controls="side"></button>
@@ -846,7 +846,6 @@ function renderLibBody() {
     const ec = $('#emptyClear'); if (ec) ec.onclick = clearFilters;
     return;
   }
-  if (S.view === 'scatter') return renderScatter(body, data);
   if (S.view === 'heat') return renderHeat(body, data);
   renderTable(body, data);
 }
@@ -965,7 +964,7 @@ function vtDraw(force) {
   const st = v.wrap.scrollTop, first = Math.min(n, Math.floor(st / v.rh) + 1), last = Math.min(n, Math.ceil((st + h - headH) / v.rh));
   const el = $('#vtRange'); if (el) el.innerHTML = n ? `Linhas <b>${nf(first, 0)}–${nf(Math.max(first, last), 0)}</b> de ${nf(n, 0)}` : '';
 }
-// rola a lista ate a linha (teclado, foco vindo da dispersao)
+// Rola a lista ate a linha selecionada por navegacao de teclado.
 function vtReveal(i) {
   const v = VT; if (!v || !v.wrap.isConnected) return;
   const headH = v.wrap.querySelector('thead').offsetHeight, y = i * v.rh, view = v.wrap.clientHeight - headH;
@@ -1084,35 +1083,6 @@ function copyText(t, msg = 'Nome copiado') {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, () => fallback());
   else fallback();
   function fallback() { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch { toast('Não foi possível copiar'); } ta.remove(); }
-}
-
-function renderScatter(body, data) {
-  const opts = k => Object.keys(M).map(x => `<option value="${x}" ${x === k ? 'selected' : ''}>${esc(M[x].l)}</option>`).join('');
-  body.innerHTML = `<div class="fade"><div class="card-h"><div><h3>Dispersão: ${esc(M[S.scX].l)} × ${esc(M[S.scY].l)}</h3><div class="sub">Mesmos ${nf(data.length, 0)} backtests da busca atual · clique num ponto para ver o resumo, duplo clique para abrir · role para dar zoom</div></div>
-    <div class="axis-pick"><label><span>Eixo X</span><select class="sel" id="scX">${opts(S.scX)}</select></label><label><span>Eixo Y</span><select class="sel" id="scY">${opts(S.scY)}</select></label></div></div>
-    <div class="card-b"><div class="chart" id="scChart" style="height:clamp(420px,calc(100vh - 420px),640px)"></div></div></div>`;
-  $('#scX').onchange = e => { S.scX = e.target.value; save(); renderLibBody(); };
-  $('#scY').onchange = e => { S.scY = e.target.value; save(); renderLibBody(); };
-  const c = pal(), X = M[S.scX], Y = M[S.scY];
-  const maxTr = Math.max(...data.map(r => r.tr || 0), 1);
-  const series = TFS.filter(tf => data.some(r => r.tf === tf)).map(tf => ({
-    name: tf, type: 'scatter', large: false,
-    symbolSize: d => 6 + 12 * Math.sqrt((d[2] || 0) / maxTr),
-    itemStyle: { color: tfColor(tf), opacity: .78, borderColor: c.surface, borderWidth: 1 },
-    emphasis: { focus: 'series', itemStyle: { opacity: 1, borderColor: c.ink, borderWidth: 1.5 } },
-    data: data.filter(r => r.tf === tf && isNum(r[S.scX]) && isNum(r[S.scY])).map(r => [r[S.scX], r[S.scY], r.tr, r.id]),
-  }));
-  const ch = mk($('#scChart'), base({
-    legend: { top: 0, right: 0, textStyle: { color: c.ink2, fontSize: 12 }, icon: 'circle', itemWidth: 10 },
-    grid: { left: 14, right: 24, top: 36, bottom: 34, containLabel: true },
-    tooltip: { trigger: 'item', backgroundColor: c.surface, borderColor: c.line2, textStyle: { color: c.ink, fontSize: 12 }, extraCssText: 'border-radius:4px;box-shadow:none;', formatter: p => { const r = BY_ID.get(p.data[3]); return `<b>${esc(r.a)} ${esc(r.tf)} · ${esc(r.dn)}</b><br><span style="color:${c.muted}">${esc(r.hb || '')} · ${esc(perLabel(r.perKey))}</span><br>${X.l}: <b>${X.f(r[S.scX])}</b><br>${Y.l}: <b>${Y.f(r[S.scY])}</b><br>PF ${nf(r.pf)} · ${nf(r.tr, 0)} trades`; } },
-    xAxis: axis('value', { name: X.l, nameLocation: 'middle', nameGap: 28, scale: true, splitLine: { show: true, lineStyle: { color: c.line } } }),
-    yAxis: axis('value', { name: Y.l, scale: true }),
-    dataZoom: [{ type: 'inside', xAxisIndex: 0 }, { type: 'inside', yAxisIndex: 0 }],
-    series,
-  }));
-  ch.on('click', p => { if (p.data) setFocus(p.data[3], true); });
-  ch.on('dblclick', p => { if (p.data) location.hash = '#/t/' + p.data[3]; });
 }
 
 function renderHeat(body, data) {
