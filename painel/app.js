@@ -126,6 +126,7 @@ const takeTxt = t => 'Take ' + String(t).replace('.', ',');
 const ptsTxt = v => nf(v, 0) + ' pts';
 const takeTip = r => `TP ${nf(r.tpPct, 0)}% do canal (${nf(r.tpPct / 100)}× o risco)${r.virada ? ` · virada de mão: TP ${nf(r.tpRevPct, 0)}% = ${takeTxt(r.takeRev)}` : ' · sem virada de mão'}`;
 const fmtDate = s => s ? String(s).split('.').reverse().join('/') : '';
+const addedDate = t => isNum(t) ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Data nao registrada';
 for (const r of ROWS) {
   r.rdd = isNum(r.plp) && isNum(r.ddb) ? r.plp / Math.max(r.ddb, 0.25) : null;   // lucro por unidade de DD do capital base
   r.mpos = r.monthsTotal ? r.monthsPos / r.monthsTotal * 100 : null;
@@ -172,6 +173,7 @@ const M = {
   maxLossStreak: { long: 'Perdas seguidas (máximo)', l: 'Perdas seguidas (máx)', f: v => nf(v, 0), better: -1 },
   risk: { long: 'Risco por trade %', l: 'Risco por trade %', f: v => pct(v, 2), better: 0 },
   score: { long: 'Score da biblioteca (índice CSV)', l: 'Score da biblioteca', f: v => nf(v), better: 1 },
+  added: { long: 'Data de adicao a biblioteca', l: 'Data de adicao', h: 'Adicionado em', f: v => addedDate(v), better: 1, tip: 'Data em que o relatorio foi incluido nesta biblioteca.' },
 };
 const RESULT_KEYS = ['plp', 'ddb', 'dde', 'pf'];
 const MORE_KEYS = ['rdd', 'tr', 'winRate', 'worstDay', 'bestDayShare', 'mpos', 'sharpe', 'risk'];

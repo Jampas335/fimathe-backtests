@@ -173,12 +173,14 @@ function main() {
     const perMatch = (c.Periodo || '').match(/(\d{4}\.\d\d\.\d\d)\s*-\s*(\d{4}\.\d\d\.\d\d)/);
     const longs = trades.filter(t => t[2] === 1), shorts = trades.filter(t => t[2] === -1);
 
+    const added = c.DataAdicao ? Date.parse(c.DataAdicao) : NaN;
     rows.push({
       id, a: c.Ativo, tf: c.Timeframe, hs: c.HoraServidor, hb: c.HoraMarcacaoBrasil, pos: +c.Posicao, fx: c.FaixaRisco,
       score: brNum(c.Score), cap: capital, pl: brNum(c.LucroLiquido), plp: brNum(c.LucroPercentual),
       ddbv: brNum(c.DrawdownCapitalInicialValor), ddb: brNum(c.DrawdownCapitalInicialPercent), dde: brNum(c.DrawdownEquityPicoPercent),
       pf: brNum(c.ProfitFactor), tr: brNum(c.Trades), per: c.Periodo, from: perMatch ? perMatch[1] : null, to: perMatch ? perMatch[2] : null,
       name, folder: rel(folder), report: rel(report), coll: c.Colecao,
+      added: Number.isFinite(added) ? added : null,
       ea: rep ? rep.meta['Expert Advisor (Robô)'] || null : null,
       sharpe: mtNum(statOf(stats, /Sharpe/)), rf: mtNum(statOf(stats, /Fator de Recupera/)), payoff: mtNum(statOf(stats, /Retorno Esperado/)),
       gp: mtNum(statOf(stats, /^Lucro Bruto/)), gl: mtNum(statOf(stats, /^Perda Bruta/)),
