@@ -1,0 +1,6 @@
+# Base local de relatórios do MetaTrader. O painel usa os dados já compilados
+# em painel/dados/, portanto esses HTMLs não precisam ir para a hospedagem.
+/2026/
+
+# Metadados locais criados pela CLI da Vercel.
+/.vercel/
