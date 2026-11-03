@@ -330,11 +330,18 @@ function renderTimeScope() {
     </div>
     <div class="time-slider" aria-label="Ajustar início e fim do período">
       <div class="time-rail"></div><div class="time-fill" id="timeFill"></div>
+      <output class="time-tip" id="timeTipFrom" data-tip="from"></output><output class="time-tip" id="timeTipTo" data-tip="to"></output>
       <input id="timeRangeFrom" type="range" min="${min}" max="${max}" step="86400" value="${b.from}"><input id="timeRangeTo" type="range" min="${min}" max="${max}" step="86400" value="${b.to}">
     </div>
     <div class="time-foot"><span>${timeActive() ? 'Métricas recalculadas pelas operações fechadas no recorte.' : 'Exibindo os resultados completos de cada relatório.'}</span>${timeActive() ? '<button class="link-btn" id="timeClear">Limpar recorte</button>' : ''}</div>
   </div>`;
-  const paint = () => { const a = +$('#timeRangeFrom').value, z = +$('#timeRangeTo').value, w = Math.max(1, max - min); $('#timeFill').style.left = `${(a - min) / w * 100}%`; $('#timeFill').style.right = `${100 - (z - min) / w * 100}%`; };
+  const paint = () => {
+    const a = +$('#timeRangeFrom').value, z = +$('#timeRangeTo').value, w = Math.max(1, max - min), pa = (a - min) / w * 100, pz = (z - min) / w * 100;
+    $('#timeFill').style.left = `${pa}%`; $('#timeFill').style.right = `${100 - pz}%`;
+    const fa = $('#timeTipFrom'), fz = $('#timeTipTo');
+    fa.textContent = fmtDate(isoDay(a).replace(/-/g, '.')); fz.textContent = fmtDate(isoDay(z).replace(/-/g, '.'));
+    fa.style.left = `${pa}%`; fz.style.left = `${pz}%`;
+  };
   const apply = next => { S.time = next; periodMetricCache = new Map(); save(); go(); };
   el.onclick = e => { const p = e.target.closest('[data-time-preset]'); if (p) apply(presetDates(p.dataset.timePreset)); if (e.target.closest('#timeClear')) apply(presetDates('all')); };
   el.onchange = e => {
@@ -349,7 +356,12 @@ function renderTimeScope() {
     if (e.target === hi && +hi.value < +lo.value) lo.value = hi.value;
     paint();
   };
-  $('#timeRangeFrom').oninput = slide; $('#timeRangeTo').oninput = slide;
+  const activateTip = which => { const sl = $('.time-slider', el); sl.classList.add('dragging'); $('#timeTipFrom').classList.toggle('active', which === 'from'); $('#timeTipTo').classList.toggle('active', which === 'to'); };
+  const hideTips = () => { const sl = $('.time-slider', el); sl.classList.remove('dragging'); $$('.time-tip', sl).forEach(t => t.classList.remove('active')); };
+  $('#timeRangeFrom').oninput = e => { activateTip('from'); slide(e); }; $('#timeRangeTo').oninput = e => { activateTip('to'); slide(e); };
+  $('#timeRangeFrom').onpointerdown = () => activateTip('from'); $('#timeRangeTo').onpointerdown = () => activateTip('to');
+  $('#timeRangeFrom').onpointerup = hideTips; $('#timeRangeTo').onpointerup = hideTips;
+  $('#timeRangeFrom').onblur = hideTips; $('#timeRangeTo').onblur = hideTips;
   $('#timeRangeFrom').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
   $('#timeRangeTo').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
   paint();
