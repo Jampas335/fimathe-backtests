@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, '..');                 // pasta Backtests
 const INDEX_CSV = path.join(ROOT, '2026', '00_Indice', 'indice-backtests-2026.csv');
 const OUT = path.join(__dirname, 'dados');
 const OUT_R = path.join(OUT, 'r');
+const OUT_PERIODS = path.join(OUT, 'periodos.js');
 
 // Parametros puramente visuais/diagnosticos nao entram no filtro de parametros.
 const COSMETIC = /^(Cor|Estilo|Largura|TamanhoLinhas|QuantidadeCanaisProjecao|MagicNumber|Comentario|HabilitarLogs|LogDetalhes|Exibir|Mostrar|Desenhar|ManterObjetos)/i;
@@ -147,6 +148,9 @@ function main() {
   fs.mkdirSync(OUT_R, { recursive: true });
 
   const rows = [], paramValues = new Map(), errors = [];
+  // Série compacta de fechamentos. Ela permite que o painel recalcule qualquer
+  // recorte de datas sem baixar os 1.482 relatórios completos de uma vez.
+  const periods = {};
   const t0 = Date.now();
   csv.forEach((c, n) => {
     const report = c.Relatorio, folder = c.PastaDestino;
@@ -174,6 +178,7 @@ function main() {
     const longs = trades.filter(t => t[2] === 1), shorts = trades.filter(t => t[2] === -1);
 
     const added = c.DataAdicao ? Date.parse(c.DataAdicao) : NaN;
+    if (rep) periods[id] = trades.filter(t => Number.isFinite(t[1]) && Number.isFinite(t[8])).map(t => [t[1], round(t[8]), Number.isFinite(t[9]) ? round(t[9]) : null]);
     rows.push({
       id, a: c.Ativo, tf: c.Timeframe, hs: c.HoraServidor, hb: c.HoraMarcacaoBrasil, pos: +c.Posicao, fx: c.FaixaRisco,
       score: brNum(c.Score), cap: capital, pl: brNum(c.LucroLiquido), plp: brNum(c.LucroPercentual),
@@ -215,6 +220,7 @@ function main() {
 
   const index = { generated: new Date().toISOString(), source: rel(INDEX_CSV), count: rows.length, params: paramCatalog, rows };
   fs.writeFileSync(path.join(OUT, 'indice.js'), 'window.BT_INDEX=' + JSON.stringify(index) + ';');
+  fs.writeFileSync(OUT_PERIODS, 'window.BT_PERIODS=' + JSON.stringify(periods) + ';');
   console.log(`\nPainel atualizado: ${rows.length} backtests, ${varying.length} parametros filtraveis, ${((Date.now() - t0) / 1000).toFixed(1)}s.`);
   if (errors.length) { console.log(`${errors.length} relatorio(s) com erro:`); errors.forEach(e => console.log('  ' + e)); }
 }

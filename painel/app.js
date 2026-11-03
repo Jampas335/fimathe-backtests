@@ -69,6 +69,7 @@ const I = window.BT_INDEX;
 if (!I) { $('#main').innerHTML = '<div class="empty"><h3>Dados do painel não encontrados</h3>Rode <b>Atualizar-Painel.cmd</b> na pasta Backtests para gerar <code>painel/dados/indice.js</code>.</div>'; return; }
 const ROWS = I.rows;
 const BY_ID = new Map(ROWS.map(r => [r.id, r]));
+const PERIOD_DATA = window.BT_PERIODS || {};
 const TF_ORDER = ['M1', 'M5', 'M15', 'M30', 'H1', 'H4', 'D1', 'W1', 'MN'];
 const ASSETS = [...new Set(ROWS.map(r => r.a))].sort();
 const TFS = [...new Set(ROWS.map(r => r.tf))].sort((a, b) => TF_ORDER.indexOf(a) - TF_ORDER.indexOf(b));
@@ -199,9 +200,10 @@ const PRESETS = [
 const emptyFilters = () => ({ q: '', a: [], tf: [], hb: [], days: [], take: [], pts: [], per: [], perFrom: '', perTo: '', ranges: {}, params: {}, pos: false, favs: false, prop: false });
 const S = Object.assign({
   filters: emptyFilters(), sort: [['plp', -1]], preset: '', view: 'table', cols: DEFAULT_COLS, page: 0, pageSize: 10, focus: null,
-  heatMetric: 'best', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false,
+  heatMetric: 'best', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false, time: { preset: 'all', from: '', to: '' },
 }, store.get('state', {}));
 S.filters = Object.assign(emptyFilters(), S.filters);
+S.time = Object.assign({ preset: 'all', from: '', to: '' }, S.time || {});
 // Normaliza preferencias antigas para uma visualizacao ainda disponivel.
 if (!['table', 'heat'].includes(S.view)) S.view = 'table';
 if (S.colsVer !== COLS_VER) { S.cols = [...DEFAULT_COLS]; S.colsVer = COLS_VER; S.pageSize = 10; }
@@ -212,10 +214,146 @@ let cmpAlign = store.get('cmpAlign', 'date');
 let cmpScale = store.get('cmpScale', 'pct');
 let views = store.get('views', []);
 const PROP = Object.assign({ target: 10, daily: 5, total: 10, cons: '' }, store.get('prop', {}));
-const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, navMini: S.navMini });
+const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, navMini: S.navMini, time: S.time });
 const propRuleText = () => `lucro ≥ ${nf(PROP.target, 0)}% · pior dia > −${nf(PROP.daily, 0)}% · DD capital inicial < ${nf(PROP.total, 0)}%${PROP.cons !== '' ? ` · melhor dia ≤ ${PROP.cons}% do lucro` : ''}`;
 
 const propPass = r => isNum(r.plp) && r.plp >= PROP.target && (!isNum(r.worstDay) || r.worstDay > -PROP.daily) && isNum(r.ddb) && r.ddb < PROP.total && (PROP.cons === '' || !isNum(r.bestDayShare) || r.bestDayShare <= Number(PROP.cons));
+
+// =====================================================================
+// recorte temporal global
+// Cada ponto em BT_PERIODS e um fechamento: [timestamp UTC, resultado, saldo].
+// O saldo de partida do recorte e o saldo imediatamente anterior ao primeiro
+// fechamento selecionado. Assim o retorno e o DD respondem a pergunta "como
+// este teste se comportou a partir daqui?", sem reaproveitar o numero do
+// relatorio inteiro.
+// =====================================================================
+const PERIOD_POINTS = Object.values(PERIOD_DATA).flat();
+let TIME_MIN = Infinity, TIME_MAX = -Infinity;
+for (const p of PERIOD_POINTS) { TIME_MIN = Math.min(TIME_MIN, p[0]); TIME_MAX = Math.max(TIME_MAX, p[0]); }
+if (!Number.isFinite(TIME_MIN)) { TIME_MIN = 0; TIME_MAX = 0; }
+const isoDay = t => { const d = new Date(t * 1000); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`; };
+const inputTs = (v, end) => { if (!/^\d{4}-\d\d-\d\d$/.test(v || '')) return null; const [y, m, d] = v.split('-').map(Number); return Date.UTC(y, m - 1, d, end ? 23 : 0, end ? 59 : 0, end ? 59 : 0) / 1000; };
+const tsInput = t => t ? isoDay(t) : '';
+const addMonths = (t, n) => { const d = new Date(t * 1000), day = d.getUTCDate(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + n); const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate(); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), Math.min(day, last), 0, 0, 0) / 1000; };
+const timeActive = () => S.time.preset !== 'all' || !!S.time.from || !!S.time.to;
+function timeBounds() {
+  let from = inputTs(S.time.from, false) ?? TIME_MIN, to = inputTs(S.time.to, true) ?? TIME_MAX;
+  if (from > to) [from, to] = [to, from];
+  return { from, to };
+}
+const timeText = () => {
+  if (!timeActive()) return 'Todo o histórico disponível';
+  const { from, to } = timeBounds();
+  return `${fmtDate(isoDay(from).replace(/-/g, '.'))} – ${fmtDate(isoDay(to).replace(/-/g, '.'))}`;
+};
+function presetDates(preset) {
+  if (preset === 'all') return { preset, from: '', to: '' };
+  const months = { m1: 1, m3: 3, y1: 12, y2: 24, y3: 36, y5: 60 }[preset];
+  const to = TIME_MAX;
+  const from = Math.max(TIME_MIN, addMonths(to, -months));
+  return { preset, from: tsInput(from), to: tsInput(to) };
+}
+function periodMetrics(row) {
+  if (!timeActive()) return row;
+  const { from, to } = timeBounds(), all = PERIOD_DATA[row.id] || [];
+  let before = null, start = -1, end = -1;
+  for (let i = 0; i < all.length; i++) {
+    if (all[i][0] < from) before = all[i];
+    else if (all[i][0] <= to) { if (start < 0) start = i; end = i; }
+    else if (end >= 0) break;
+  }
+  if (start < 0) return Object.assign({}, row, { _window: true, windowEmpty: true, pl: null, plp: null, ddb: null, dde: null, ddbv: null, pf: null, tr: 0, winRate: null, worstDay: null, bestDayShare: null, monthsPos: 0, monthsTotal: 0, mpos: null, worstMonth: null, ddBalPeak: null, maxLossStreak: 0, gp: null, gl: null, avgW: null, avgL: null, payoff: null, sharpe: null, rf: null, spark: null });
+  const points = all.slice(start, end + 1);
+  const base = before?.[2] ?? (points[0][2] - points[0][1]) ?? row.cap;
+  let bal = base, peak = base, minBase = base, maxDdPeak = 0, grossProfit = 0, grossLoss = 0, wins = 0, streak = 0, maxLoss = 0;
+  const days = new Map(), months = new Map(), spark = [0];
+  for (const p of points) {
+    const pnl = p[1]; const date = new Date(p[0] * 1000); const dk = date.toISOString().slice(0, 10), mk = dk.slice(0, 7);
+    if (!days.has(dk)) days.set(dk, { start: bal, pnl: 0, n: 0 });
+    if (!months.has(mk)) months.set(mk, { start: bal, pnl: 0, n: 0 });
+    days.get(dk).pnl += pnl; days.get(dk).n++; months.get(mk).pnl += pnl; months.get(mk).n++;
+    bal += pnl; peak = Math.max(peak, bal); minBase = Math.min(minBase, bal);
+    maxDdPeak = Math.max(maxDdPeak, (peak - bal) / peak * 100);
+    if (pnl > 0) { grossProfit += pnl; wins++; streak = 0; } else { grossLoss += pnl; streak++; maxLoss = Math.max(maxLoss, streak); }
+    spark.push((bal - base) / base * 100);
+  }
+  const pnl = bal - base, ddb = Math.max(0, (base - minBase) / base * 100);
+  let worstDay = 0, bestDay = 0;
+  for (const d of days.values()) { const pc = d.pnl / d.start * 100; worstDay = Math.min(worstDay, pc); bestDay = Math.max(bestDay, d.pnl); }
+  const mon = [...months.values()], worstMonth = mon.length ? Math.min(...mon.map(m => m.pnl / m.start * 100)) : null;
+  const plp = pnl / base * 100, pf = grossLoss ? grossProfit / Math.abs(grossLoss) : (grossProfit ? null : 0);
+  return Object.assign({}, row, {
+    _window: true, windowEmpty: false, windowFrom: isoDay(points[0][0]), windowTo: isoDay(points.at(-1)[0]), windowBase: base,
+    pl: pnl, plp, ddb, dde: maxDdPeak, ddbv: base - minBase, ddBalPeak: maxDdPeak, pf, tr: points.length,
+    gp: grossProfit, gl: grossLoss, avgW: wins ? grossProfit / wins : null, avgL: points.length - wins ? grossLoss / (points.length - wins) : null,
+    winRate: points.length ? wins / points.length * 100 : null, worstDay, bestDayShare: pnl > 0 ? bestDay / pnl * 100 : null,
+    monthsPos: mon.filter(m => m.pnl > 0).length, monthsTotal: mon.length, mpos: mon.length ? mon.filter(m => m.pnl > 0).length / mon.length * 100 : null,
+    worstMonth, maxLossStreak: maxLoss, payoff: points.length ? pnl / points.length : null, sharpe: null, rf: null,
+    rdd: plp / Math.max(ddb, .25), tradingDays: days.size, spark,
+  });
+}
+let periodMetricCache = new Map();
+const metricRow = row => {
+  if (!timeActive()) return row;
+  if (!periodMetricCache.has(row.id)) periodMetricCache.set(row.id, periodMetrics(row));
+  return periodMetricCache.get(row.id);
+};
+function scopedDetail(row, d) {
+  if (!timeActive()) return d;
+  const { from, to } = timeBounds();
+  const m = metricRow(row); let bal = m.windowBase || row.cap;
+  const trades = d.trades.filter(t => t[1] >= from && t[1] <= to).map(t => { const x = [...t]; bal += x[8]; x[9] = bal; return x; });
+  return Object.assign({}, d, { trades });
+}
+function renderTimeScope() {
+  const el = $('#timeScope'); if (!el) return;
+  // Em recorte, o dado disponível é o saldo após operações fechadas; nunca
+  // reapresentamos o DD de equity do relatório completo como se fosse do período.
+  if (timeActive()) {
+    M.ddb.l = 'DD saldo inicial %'; M.ddb.h = 'DD inicial'; M.ddb.long = 'DD de saldo abaixo do saldo de início do recorte'; M.ddb.tip = 'Calculado pelo painel com operações fechadas dentro do recorte. O MT5 não exporta equity intradiária por operação.';
+    M.dde.l = 'DD saldo do pico %'; M.dde.h = 'DD do pico'; M.dde.long = 'DD de saldo fechado a partir do pico no recorte'; M.dde.tip = 'Calculado pelo painel com operações fechadas dentro do recorte.';
+    RANGE_LABEL.ddb = 'DD saldo inicial (%)'; RANGE_LABEL.dde = 'DD saldo do pico (%)';
+  } else {
+    M.ddb.l = 'DD capital inicial %'; M.ddb.h = 'DD inicial'; M.ddb.long = 'DD capital inicial % — queda da equity abaixo do capital inicial'; M.ddb.tip = 'Maior queda da equity abaixo do capital inicial (equity registrada pelo MT5). É a medida usada como “perda total” pelas mesas prop.';
+    M.dde.l = 'DD equity do pico %'; M.dde.h = 'DD do pico'; M.dde.long = 'DD equity do pico % — queda da equity a partir do maior valor anterior'; M.dde.tip = 'Maior queda da equity a partir do pico anterior (MT5: rebaixamento máximo do capital líquido). Inclui quedas depois de lucros.';
+    RANGE_LABEL.ddb = 'DD capital inicial (%)'; RANGE_LABEL.dde = 'DD equity do pico (%)';
+  }
+  const b = timeBounds(), min = TIME_MIN || b.from, max = TIME_MAX || b.to;
+  const presets = [['all', 'Tudo'], ['m1', '1M'], ['m3', '3M'], ['y1', '1A'], ['y2', '2A'], ['y3', '3A'], ['y5', '5A']];
+  el.innerHTML = `<div class="time-scope-in">
+    <div class="time-scope-title"><span>${ICON.cal}</span><div><b>Janela de análise</b><small>${timeText()}</small></div></div>
+    <div class="time-presets" role="group" aria-label="Períodos rápidos">${presets.map(([k, l]) => `<button data-time-preset="${k}" class="${S.time.preset === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    <div class="time-custom">
+      <label>De<input id="timeFrom" type="date" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.from || tsInput(min)}"></label>
+      <span>até</span>
+      <label>Até<input id="timeTo" type="date" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.to || tsInput(max)}"></label>
+    </div>
+    <div class="time-slider" aria-label="Ajustar início e fim do período">
+      <div class="time-rail"></div><div class="time-fill" id="timeFill"></div>
+      <input id="timeRangeFrom" type="range" min="${min}" max="${max}" step="86400" value="${b.from}"><input id="timeRangeTo" type="range" min="${min}" max="${max}" step="86400" value="${b.to}">
+    </div>
+    <div class="time-foot"><span>${timeActive() ? 'Métricas recalculadas pelas operações fechadas no recorte.' : 'Exibindo os resultados completos de cada relatório.'}</span>${timeActive() ? '<button class="link-btn" id="timeClear">Limpar recorte</button>' : ''}</div>
+  </div>`;
+  const paint = () => { const a = +$('#timeRangeFrom').value, z = +$('#timeRangeTo').value, w = Math.max(1, max - min); $('#timeFill').style.left = `${(a - min) / w * 100}%`; $('#timeFill').style.right = `${100 - (z - min) / w * 100}%`; };
+  const apply = next => { S.time = next; periodMetricCache = new Map(); save(); go(); };
+  el.onclick = e => { const p = e.target.closest('[data-time-preset]'); if (p) apply(presetDates(p.dataset.timePreset)); if (e.target.closest('#timeClear')) apply(presetDates('all')); };
+  el.onchange = e => {
+    if (e.target.id === 'timeFrom' || e.target.id === 'timeTo') {
+      const from = $('#timeFrom').value, to = $('#timeTo').value;
+      apply({ preset: 'custom', from: from <= to ? from : to, to: from <= to ? to : from });
+    }
+  };
+  const slide = e => {
+    const lo = $('#timeRangeFrom'), hi = $('#timeRangeTo');
+    if (e.target === lo && +lo.value > +hi.value) hi.value = lo.value;
+    if (e.target === hi && +hi.value < +lo.value) lo.value = hi.value;
+    paint();
+  };
+  $('#timeRangeFrom').oninput = slide; $('#timeRangeTo').oninput = slide;
+  $('#timeRangeFrom').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
+  $('#timeRangeTo').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
+  paint();
+}
 
 // =====================================================================
 // filtros
@@ -248,7 +386,7 @@ function matches(r, f, except) {
   if (f.prop && !propPass(r)) return false;
   return true;
 }
-const filtered = except => ROWS.filter(r => (libMode !== 'fav' || favs.has(r.id)) && matches(r, S.filters, except));
+const filtered = except => ROWS.map(metricRow).filter(r => !r.windowEmpty && (libMode !== 'fav' || favs.has(r.id)) && matches(r, S.filters, except));
 function compare(a, b) {
   for (const [k, d] of S.sort) {
     const x = a[k], y = b[k];
@@ -407,7 +545,7 @@ function applyRange(t) {
   t.classList.toggle('set', n != null);
   changed();
 }
-function clearFilters() { S.filters = emptyFilters(); S.preset = ''; renderSide(); changed(); }
+function clearFilters() { S.filters = emptyFilters(); S.preset = ''; S.time = presetDates('all'); periodMetricCache = new Map(); renderTimeScope(); renderSide(); changed(); }
 
 // dialogos (critério prop, configurações, ajuda)
 function dialog(id, html, onclose) {
@@ -693,7 +831,7 @@ function renderLib() {
   expMenu.onclick = e => {
     const b = e.target.closest('[data-exp]'); if (!b) return; closeMenus();
     if (b.dataset.exp === 'f') exportCsv(libData(), 'filtrados');
-    else if (b.dataset.exp === 's') exportCsv(cmp.map(id => BY_ID.get(id)), 'selecionados');
+    else if (b.dataset.exp === 's') exportCsv(cmp.map(id => metricRow(BY_ID.get(id))), 'selecionados');
     else exportCsv([...ROWS].sort(compare), 'biblioteca');
   };
   // visualizacoes salvas
@@ -706,12 +844,12 @@ function renderLib() {
   vMenu.onclick = e => {
     e.stopPropagation();
     const a = e.target.closest('[data-vapply]'), d = e.target.closest('[data-vdel]');
-    if (a) { const v = views[+a.dataset.vapply]; Object.assign(S, JSON.parse(JSON.stringify({ filters: Object.assign(emptyFilters(), v.filters), sort: v.sort, preset: v.preset || '', cols: v.cols, view: v.view }))); closeMenus(); renderSide(); renderLib(); save(); toast(`Visualização “${v.name}” aplicada`); return; }
+    if (a) { const v = views[+a.dataset.vapply]; Object.assign(S, JSON.parse(JSON.stringify({ filters: Object.assign(emptyFilters(), v.filters), sort: v.sort, preset: v.preset || '', cols: v.cols, view: v.view, time: Object.assign({ preset: 'all', from: '', to: '' }, v.time || {}) }))); periodMetricCache = new Map(); closeMenus(); renderTimeScope(); renderSide(); renderLib(); save(); toast(`Visualização “${v.name}” aplicada`); return; }
     if (d) { views.splice(+d.dataset.vdel, 1); store.set('views', views); drawViews(vMenu); return; }
     if (e.target.id === 'vSave') {
       const name = (prompt('Nome da visualização:', '') || '').trim(); if (!name) return;
       views = views.filter(v => v.name !== name);
-      views.push({ name, filters: JSON.parse(JSON.stringify(S.filters)), sort: S.sort, preset: S.preset, cols: S.cols, view: S.view });
+      views.push({ name, filters: JSON.parse(JSON.stringify(S.filters)), sort: S.sort, preset: S.preset, cols: S.cols, view: S.view, time: S.time });
       store.set('views', views); drawViews(vMenu); toast(`Visualização “${name}” salva`);
     }
   };
@@ -741,7 +879,7 @@ function renderLib() {
   $('#selbar').onclick = e => {
     const b = e.target.closest('[data-sel]'); if (!b) return;
     if (b.dataset.sel === 'clear') { cmp = []; store.set('cmp', cmp); updateCmpBadge(); renderLibBody(); renderPreview(true); }
-    if (b.dataset.sel === 'exp') exportCsv(cmp.map(id => BY_ID.get(id)), 'selecionados');
+    if (b.dataset.sel === 'exp') exportCsv(cmp.map(id => metricRow(BY_ID.get(id))), 'selecionados');
   };
   $('#preview').onclick = e => {
     const id = S.focus;
@@ -783,11 +921,11 @@ function tween(el, key, to, fmt) {
 function renderKpis(data) {
   const pos = data.filter(r => r.pl > 0);
   const props = data.filter(propPass).length;
-  const all = data.length === ROWS.length && libMode === 'lib';
+  const all = data.length === ROWS.length && libMode === 'lib' && !timeActive();
   const k = (ic, tone, l, sub, extra = '') => `<div class="kpi"><span class="kpi-ic ${tone}">${ic}</span><div class="kpi-t"><span class="kpi-l">${l}</span><strong>—</strong><em title="${esc(sub)}">${esc(sub)}</em></div>${extra}</div>`;
   const el = $('#kpis');
   el.innerHTML =
-    k(ICON.doc, '', libMode === 'fav' ? 'Favoritos no filtro' : all ? 'Backtests na biblioteca' : 'Backtests no filtro', all ? 'sem filtros aplicados' : `de ${nf(libMode === 'fav' ? favs.size : ROWS.length, 0)} ${libMode === 'fav' ? 'favoritos' : 'relatórios'}`) +
+    k(ICON.doc, '', libMode === 'fav' ? 'Favoritos no filtro' : all ? 'Backtests na biblioteca' : timeActive() ? 'Backtests com dados no recorte' : 'Backtests no filtro', all ? 'sem filtros aplicados' : timeActive() ? timeText() : `de ${nf(libMode === 'fav' ? favs.size : ROWS.length, 0)} ${libMode === 'fav' ? 'favoritos' : 'relatórios'}`) +
     k(ICON.bars, 'pos', 'Testes lucrativos', `${nf(pos.length, 0)} resultados positivos`) +
     k(ICON.pie, '', 'Profit Factor mediano', `DD equity do pico mediano ${pct(median(data.map(r => r.dde)))}`) +
     k(ICON.target, 'gold', 'Dentro do critério prop', `meta ${nf(PROP.target, 0)}% · diária ${nf(PROP.daily, 0)}% · total ${nf(PROP.total, 0)}%`, `<div class="kpi-act"><button class="link-btn" data-open-prop>Ver critério ${ICON.arrow}</button></div>`);
@@ -855,6 +993,10 @@ function renderLibBody() {
 // periodo curto: "Jan – Out 2026" ou "Set 2025 – Ago 2026"
 const perShort = r => {
   const p = s => { const [y, m] = String(s || '').split('.'); return { y, m: MES[+m - 1] || '?' }; };
+  if (r._window && r.windowFrom && r.windowTo) {
+    const a = p(r.windowFrom.replace(/-/g, '.')), b = p(r.windowTo.replace(/-/g, '.'));
+    return a.y === b.y ? `${a.m} – ${b.m} ${b.y}` : `${a.m} ${a.y} – ${b.m} ${b.y}`;
+  }
   if (!r.from || !r.to) return perLabel(r.perKey);
   const a = p(r.from), b = p(r.to);
   return a.y === b.y ? `${a.m} – ${b.m} ${b.y}` : `${a.m} ${a.y} – ${b.m} ${b.y}`;
@@ -866,12 +1008,12 @@ const cfgLine = r => (r.pts == null && r.take == null) ? '' : `<div class="cfg2"
 function cell(c, r, sp) {
   const v = r[c.k];
   switch (c.k) {
-    case 'name': return `<td class="c-name"><a class="tname ${r.dnEmpty ? 'noname' : ''}" href="#/t/${r.id}" title="${esc(r.dn)} — relatório: ${esc(r.name)}">${esc(r.dn)}</a><div class="tmeta" title="${esc([r.days, perLabel(r.perKey)].filter(Boolean).join(' · '))}">${[perShort(r), isNum(r.risk) ? 'risco ' + riskTxt(r.risk) : ''].filter(Boolean).map(esc).join('<i>•</i>')}</div></td>`;
+    case 'name': return `<td class="c-name"><a class="tname ${r.dnEmpty ? 'noname' : ''}" href="#/t/${r.id}" title="${esc(r.dn)} — relatório: ${esc(r.name)}">${esc(r.dn)}</a><div class="tmeta" title="${esc([r.days, r._window ? (r.windowFrom ? `${r.windowFrom} → ${r.windowTo}` : 'Sem operações no recorte') : perLabel(r.perKey)].filter(Boolean).join(' · '))}">${[perShort(r), isNum(r.risk) ? 'risco ' + riskTxt(r.risk) : ''].filter(Boolean).map(esc).join('<i>•</i>')}</div></td>`;
     case 'spark': return `<td>${sparkSvg(r.spark, sp[0], sp[1])}</td>`;
     case 'cfg': return `<td class="c-cfg"><div><span class="asset">${esc(r.a)}</span><span class="tag">${esc(r.tf)}</span>${r.hb ? `<span class="tag">${esc(r.hb)}</span>` : ''}</div>${cfgLine(r)}</td>`;
     case 'pts': return `<td class="n">${r.pts != null ? nf(r.pts, 0) : '—'}</td>`;
     case 'take': return `<td class="n" title="${esc(takeTip(r))}">${r.take != null ? nf(r.take, r.take % 1 ? 1 : 0) : '—'}</td>`;
-    case 'perKey': return `<td class="ink2">${esc(perLabel(v))}</td>`;
+    case 'perKey': return `<td class="ink2">${esc(r._window ? (r.windowFrom ? `${fmtDate(r.windowFrom.replace(/-/g, '.'))} – ${fmtDate(r.windowTo.replace(/-/g, '.'))}` : 'Sem operações') : perLabel(v))}</td>`;
   }
   if (M[c.k]) return `<td class="n ${M[c.k].c ? cls(v) : ''}">${M[c.k].f(v)}</td>`;
   return `<td class="ink2">${esc(v ?? '—')}</td>`;
@@ -1000,7 +1142,7 @@ function setFocus(id, open) {
 }
 function renderPreview(force) {
   const el = $('#preview'); if (!el) return;
-  const r = BY_ID.get(S.focus);
+  const r = metricRow(BY_ID.get(S.focus));
   if (!r) { pvShown = null; disposePv(); el.innerHTML = `<div class="pv-empty fade">${ICON.cursor}<h3>Nenhum backtest selecionado</h3><p>Clique numa linha para ver o resumo aqui.</p></div>`; return; }
   if (pvShown === r.id && !force) return;
   const same = pvShown === r.id;
@@ -1031,7 +1173,7 @@ function renderPreview(force) {
   if (keepChart) { $('#pvChart').replaceWith(chartEl); return; }
   disposePv();
   const id = r.id;
-  loadDetail(id).then(d => { if (pvShown === id) drawPvChart(r, analyze(r, d)); }).catch(() => { if (pvShown === id) drawPvChart(r, null); });
+  loadDetail(id).then(d => { if (pvShown === id) drawPvChart(r, analyze(r, scopedDetail(BY_ID.get(id), d))); }).catch(() => { if (pvShown === id) drawPvChart(r, null); });
 }
 function drawPvChart(r, A) {
   const el = $('#pvChart'); if (!el) return;
@@ -1171,10 +1313,11 @@ function loadDetail(id) {
 
 // Analises a partir dos trades: [abertura, fechamento, dir, vol, pEntrada, pSaida, sl, tp, resultado, saldo, cmtEntrada, cmtSaida]
 function analyze(row, d) {
-  const cap = row.cap || 10000, T = d.trades;
-  const startT = d.deals.length ? d.deals[0][0] : (T[0] ? T[0][0] : 0);
+  const cap = row.windowBase || row.cap || 10000, T = d.trades;
+  const startT = T[0] ? T[0][1] : 0;
   const balance = [[startT * 1000, cap]];
-  for (const x of d.deals) if (x[1] !== 'balance' && x[2] !== 'in' && isNum(x[7])) balance.push([x[0] * 1000, x[7]]);
+  let curveBal = cap;
+  for (const x of T) { curveBal += x[8]; balance.push([x[1] * 1000, curveBal]); }
   let peak = cap; const ddPeak = [], ddBase = [];
   for (const [t, b] of balance) { peak = Math.max(peak, b); ddPeak.push([t, -((peak - b) / peak * 100)]); ddBase.push([t, Math.min(0, (b - cap) / cap * 100)]); }
   // mensal e diario
@@ -1204,12 +1347,14 @@ const TAB_ALIAS = { analise: 'operacoes', trades: 'operacoes', params: 'config',
 let detailTab = 'geral';
 const crumb = () => '';
 async function renderDetail(id) {
-  const row = BY_ID.get(id);
+  const baseRow = BY_ID.get(id);
+  const row = baseRow && metricRow(baseRow);
   if (!row) { $('#main').innerHTML = `${crumb()}<div class="card"><div class="empty"><h3>Backtest não encontrado</h3>O índice pode ter sido regenerado desde que este link foi aberto. <a href="#/">Voltar para a biblioteca</a></div></div>`; return; }
   $('#main').innerHTML = `${crumb(row)}<div class="loading"><i class="spin"></i>Lendo relatório…</div>`;
   let d;
   try { d = await loadDetail(id); } catch (e) { $('#main').innerHTML = `${crumb(row)}<div class="card"><div class="empty"><h3>Não foi possível ler este relatório</h3>${esc(e.message)}</div></div>`; return; }
   if (route().id !== id) return;
+  d = scopedDetail(baseRow, d);
   const A = analyze(row, d);
   const inCmp = cmp.includes(id);
   $('#main').innerHTML = `
@@ -1219,7 +1364,7 @@ async function renderDetail(id) {
       <h1>${esc(row.dn)}</h1>
       <div class="orig"><span class="muted">Relatório original</span><code title="${esc(row.name)}">${esc(row.name)}</code><button class="btn xs" id="dCopy" title="Copiar nome original">${ICON.copy}Copiar</button></div>
       ${nameNote(row)}
-      <div class="meta"><span>${esc(perLabel(row.perKey))}</span><span>${esc(row.ea || '')}</span>${d.meta['Empresa'] ? `<span>${esc(d.meta['Empresa'])}</span>` : ''}<span>Alavancagem ${esc(d.meta['Alavancagem'] || '—')}</span><span>Capital inicial ${money(row.cap, 0)}</span></div>
+      <div class="meta"><span>${esc(timeActive() ? `Recorte: ${timeText()}` : perLabel(row.perKey))}</span><span>${esc(row.ea || '')}</span>${d.meta['Empresa'] ? `<span>${esc(d.meta['Empresa'])}</span>` : ''}<span>Alavancagem ${esc(d.meta['Alavancagem'] || '—')}</span><span>${timeActive() ? `Saldo de partida ${money(row.windowBase, 0)}` : `Capital inicial ${money(row.cap, 0)}`}</span></div>
     </div>
     <div class="d-actions">
       <button class="btn outline ${favs.has(id) ? 'on' : ''}" id="dFav" aria-pressed="${favs.has(id)}">★ ${favs.has(id) ? 'Favorito' : 'Favoritar'}</button>
@@ -1232,8 +1377,8 @@ async function renderDetail(id) {
     </div></header>
     <div class="kpis kpis6 rise">
       ${kpi('Lucro líquido', money(row.pl), `${sgn(row.plp, 2, '%')} sobre ${money(row.cap, 0)}`, cls(row.pl))}
-      ${kpi('DD capital inicial', pct(row.ddb), `${money(row.ddbv)} abaixo do capital inicial`, '', M.ddb.tip)}
-      ${kpi('DD equity do pico', pct(row.dde), `DD de saldo do pico: ${pct(row.ddBalPeak)}`, '', M.dde.tip)}
+      ${kpi(timeActive() ? 'DD saldo inicial do recorte' : 'DD capital inicial', pct(row.ddb), `${money(row.ddbv)} abaixo do saldo de partida`, '', timeActive() ? 'Calculado com operações fechadas dentro do recorte. O MT5 não exporta a equity intradiária.' : M.ddb.tip)}
+      ${kpi(timeActive() ? 'DD saldo do pico' : 'DD equity do pico', pct(row.dde), timeActive() ? 'operações fechadas no recorte' : `DD de saldo do pico: ${pct(row.ddBalPeak)}`, '', timeActive() ? 'Calculado a partir do saldo após cada operação fechada.' : M.dde.tip)}
       ${kpi('Profit Factor', nf(row.pf), `Fator de recuperação ${nf(row.rf)}`)}
       ${kpi('Trades', nf(row.tr, 0), `acerto ${pct(row.winRate, 1)} · ${nf(row.nL, 0)} compras / ${nf(row.nS, 0)} vendas`)}
       ${kpi('Pior dia', sgn(row.worstDay, 2, '%'), `${nf(row.tradingDays, 0)} dias com trade`, cls(row.worstDay), M.worstDay.tip)}
@@ -1254,6 +1399,7 @@ async function renderDetail(id) {
 const T_len = d => nf(d.trades.length, 0);
 // Explica numeros anotados no nome do relatorio (ex.: DD12_60) comparando com as metricas calculadas.
 function nameNote(row) {
+  if (timeActive()) return '<div class="name-note">' + ICON.info + '<span>Os números presentes no nome pertencem ao relatório completo; os indicadores desta tela respeitam o recorte temporal selecionado.</span></div>';
   const tags = (row.nameTags || []).filter(t => t.k === 'DD' || t.k === 'Lucro');
   if (!tags.length) return '';
   const near = (a, b) => isNum(a) && isNum(b) && Math.abs(a - b) < 0.06;
@@ -1413,17 +1559,20 @@ function tabPeriodos(el, row, d, A) {
 
 function tabRisco(el, row, d, A) {
   const T = d.trades;
+  const scoped = timeActive();
+  const ddBaseLabel = scoped ? 'DD saldo inicial do recorte' : 'DD capital inicial';
+  const ddPeakLabel = scoped ? 'DD saldo do pico' : 'DD equity do pico';
   const rules = [
     { l: `Meta de lucro ≥ ${PROP.target}%`, ok: row.plp >= PROP.target, v: `Lucro ${sgn(row.plp, 2, '%')}` },
     { l: `Perda diária menor que ${PROP.daily}%`, ok: isNum(row.worstDay) ? row.worstDay > -PROP.daily : null, v: `Pior dia ${sgn(row.worstDay, 2, '%')} (trades fechados)` },
-    { l: `Perda total menor que ${PROP.total}%`, ok: isNum(row.ddb) ? row.ddb < PROP.total : null, v: `DD capital inicial ${pct(row.ddb)}` },
+    { l: `Perda total menor que ${PROP.total}%`, ok: isNum(row.ddb) ? row.ddb < PROP.total : null, v: `${ddBaseLabel} ${pct(row.ddb)}` },
     { l: PROP.cons !== '' ? `Melhor dia ≤ ${PROP.cons}% do lucro` : 'Consistência (regra não definida)', ok: PROP.cons === '' ? null : (isNum(row.bestDayShare) ? row.bestDayShare <= Number(PROP.cons) : null), v: `Melhor dia = ${pct(row.bestDayShare, 1)} do lucro` },
   ];
   const best = T.length ? T.reduce((b, t) => t[8] > b[8] ? t : b) : null, worst = T.length ? T.reduce((b, t) => t[8] < b[8] ? t : b) : null;
   el.innerHTML = `<div class="stack">
     <div class="dd-explain">
-      <div class="dd-card"><span>DD capital inicial</span><strong>${pct(row.ddb)}</strong><em>${money(row.ddbv)}</em><p>Maior queda da <b>equity</b> abaixo do capital inicial, registrada pelo MT5. Ignora quedas que acontecem acima do capital inicial. É o que as mesas prop chamam de perda total.</p></div>
-      <div class="dd-card"><span>DD equity do pico</span><strong>${pct(row.dde)}</strong><em>MT5: rebaixamento máximo do capital líquido</em><p>Maior queda da <b>equity</b> (com posições abertas) a partir do maior valor anterior. Inclui devolução de lucro.</p></div>
+      <div class="dd-card"><span>${ddBaseLabel}</span><strong>${pct(row.ddb)}</strong><em>${money(row.ddbv)}</em><p>${scoped ? 'Maior queda do <b>saldo fechado</b> abaixo do saldo no início do recorte.' : 'Maior queda da <b>equity</b> abaixo do capital inicial, registrada pelo MT5. Ignora quedas que acontecem acima do capital inicial. É o que as mesas prop chamam de perda total.'}</p></div>
+      <div class="dd-card"><span>${ddPeakLabel}</span><strong>${pct(row.dde)}</strong><em>${scoped ? 'saldo fechado no recorte' : 'MT5: rebaixamento máximo do capital líquido'}</em><p>${scoped ? 'Maior queda do <b>saldo fechado</b> a partir do maior saldo dentro do recorte.' : 'Maior queda da <b>equity</b> (com posições abertas) a partir do maior valor anterior. Inclui devolução de lucro.'}</p></div>
       <div class="dd-card"><span>DD de saldo do pico</span><strong>${pct(row.ddBalPeak)}</strong><em>calculado pelo painel</em><p>Maior queda do <b>saldo</b> (só operações fechadas) a partir do maior saldo anterior. É a linha vermelha do gráfico abaixo.</p></div>
     </div>
     <div class="card"><div class="card-h"><div><h3>Drawdown ao longo do tempo</h3><div class="sub">Calculado a partir do saldo após cada operação fechada</div></div></div><div class="card-b"><div class="chart" id="cDd"></div></div></div>
@@ -1694,7 +1843,9 @@ async function renderCompare() {
   let det;
   try { det = await Promise.all(ids.map(loadDetail)); } catch (e) { main.innerHTML = `<div class="card"><div class="empty"><h3>Não foi possível ler um dos relatórios</h3>${esc(e.message)}</div></div>`; return; }
   if (route().name !== 'cmp') return;
-  const c = pal(), rows = ids.map(id => BY_ID.get(id)), an = rows.map((r, i) => analyze(r, det[i]));
+  const c = pal(), rows = ids.map(id => metricRow(BY_ID.get(id)));
+  det = det.map((d, i) => scopedDetail(BY_ID.get(ids[i]), d));
+  const an = rows.map((r, i) => analyze(r, det[i]));
   const col = i => c.s[i % 8];
   const sw = i => `<i class="sw" style="background:${col(i)}"></i>`;
   const metricRows = ['plp', 'pl', 'ddb', 'dde', 'pf', 'rdd', 'tr', 'winRate', 'worstDay', 'bestDayShare', 'mpos', 'worstMonth', 'sharpe', 'rf', 'payoff', 'maxLossStreak', 'risk'];
@@ -1713,7 +1864,7 @@ async function renderCompare() {
         <div class="seg" id="cmpAlign" aria-label="Eixo de tempo"><button data-v="date" class="${cmpAlign === 'date' ? 'on' : ''}">Data real</button><button data-v="start" class="${cmpAlign === 'start' ? 'on' : ''}" title="Eixo em dias desde o início de cada teste">Alinhar pelo início</button></div>
         <button class="btn outline" id="cmpClear">Limpar seleção</button></div></div>
     <div class="card rise" style="margin-bottom:14px"><table class="grid ident"><thead><tr><th></th><th>Backtest</th><th>Período</th><th class="n">Capital inicial</th><th class="n">Trades</th><th></th></tr></thead><tbody>
-      ${rows.map((r, i) => `<tr style="cursor:default"><td style="width:24px">${sw(i)}</td><td><a class="tname" href="#/t/${r.id}">${esc(r.a)} ${esc(r.tf)} · ${esc(r.dn)}</a><div class="tmeta mono" title="${esc(r.name)}">${esc(r.name)}</div></td><td class="ink2">${esc(perLabel(r.perKey))}</td><td class="n">${money(r.cap, 0)}</td><td class="n">${nf(r.tr, 0)}</td><td class="n"><button class="x" data-rm="${r.id}" aria-label="Remover ${esc(r.dn)} da comparação" title="Remover da comparação">×</button></td></tr>`).join('')}
+      ${rows.map((r, i) => `<tr style="cursor:default"><td style="width:24px">${sw(i)}</td><td><a class="tname" href="#/t/${r.id}">${esc(r.a)} ${esc(r.tf)} · ${esc(r.dn)}</a><div class="tmeta mono" title="${esc(r.name)}">${esc(r.name)}</div></td><td class="ink2">${esc(timeActive() ? (r.windowFrom ? `${fmtDate(r.windowFrom.replace(/-/g, '.'))} – ${fmtDate(r.windowTo.replace(/-/g, '.'))}` : 'Sem operações') : perLabel(r.perKey))}</td><td class="n">${money(timeActive() ? r.windowBase : r.cap, 0)}</td><td class="n">${nf(r.tr, 0)}</td><td class="n"><button class="x" data-rm="${r.id}" aria-label="Remover ${esc(r.dn)} da comparação" title="Remover da comparação">×</button></td></tr>`).join('')}
     </tbody></table></div>
     <div class="stack">
       <div class="card"><div class="card-h"><div><h3>${abs ? 'Saldo' : 'Retorno acumulado'}</h3><div class="sub">${abs ? 'Saldo em dólares após cada operação fechada' : '% sobre o capital inicial de cada teste'} · ${cmpAlign === 'start' ? 'eixo = dias desde o início de cada teste' : 'eixo = data real'}</div></div></div>
@@ -1781,6 +1932,7 @@ function go() {
   closeNav(); document.body.classList.remove('lock');
   $$('[data-nav]').forEach(a => a.classList.toggle('on', a.dataset.nav === (r.name === 'detail' ? 'lib' : r.name)));
   renderCrumbs(r);
+  renderTimeScope();
   if (r.name === 'lib' || r.name === 'fav') { libMode = r.name; renderSide(); renderLib(); }
   if (r.name !== 'lib' && r.name !== 'fav') $('#main').classList.remove('lib-fill');
   if (r.name === 'detail') { detailTab = TAB_ALIAS[r.tab] || (TABS.some(t => t[0] === r.tab) ? r.tab : 'geral'); renderDetail(r.id); }
