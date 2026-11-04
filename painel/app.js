@@ -200,7 +200,7 @@ const PRESETS = [
 const emptyFilters = () => ({ q: '', a: [], tf: [], hb: [], days: [], take: [], pts: [], per: [], perFrom: '', perTo: '', ranges: {}, params: {}, pos: false, favs: false, prop: false });
 const S = Object.assign({
   filters: emptyFilters(), sort: [['plp', -1]], preset: '', view: 'table', cols: DEFAULT_COLS, page: 0, pageSize: 10, focus: null,
-  heatMetric: 'best', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false, time: { preset: 'all', from: '', to: '' },
+  heatMetric: 'best', sideHidden: false, colsVer: 0, showAllAssets: false, density: 'normal', showHl: false, previewOpen: true, time: { preset: 'all', from: '', to: '' },
 }, store.get('state', {}));
 S.filters = Object.assign(emptyFilters(), S.filters);
 S.time = Object.assign({ preset: 'all', from: '', to: '' }, S.time || {});
@@ -214,7 +214,7 @@ let cmpAlign = store.get('cmpAlign', 'date');
 let cmpScale = store.get('cmpScale', 'pct');
 let views = store.get('views', []);
 const PROP = Object.assign({ target: 10, daily: 5, total: 10, cons: '' }, store.get('prop', {}));
-const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, navMini: S.navMini, time: S.time });
+const save = () => store.set('state', { filters: S.filters, sort: S.sort, preset: S.preset, view: S.view, cols: S.cols, pageSize: S.pageSize, heatMetric: S.heatMetric, sideHidden: S.sideHidden, colsVer: S.colsVer, showAllAssets: S.showAllAssets, density: S.density, focus: S.focus, previewOpen: S.previewOpen, navMini: S.navMini, time: S.time });
 const propRuleText = () => `lucro ≥ ${nf(PROP.target, 0)}% · pior dia > −${nf(PROP.daily, 0)}% · DD capital inicial < ${nf(PROP.total, 0)}%${PROP.cons !== '' ? ` · melhor dia ≤ ${PROP.cons}% do lucro` : ''}`;
 
 const propPass = r => isNum(r.plp) && r.plp >= PROP.target && (!isNum(r.worstDay) || r.worstDay > -PROP.daily) && isNum(r.ddb) && r.ddb < PROP.total && (PROP.cons === '' || !isNum(r.bestDayShare) || r.bestDayShare <= Number(PROP.cons));
@@ -726,7 +726,6 @@ function refreshQuick() {
   if ($('#qHb')) $('#qHb').innerHTML = facetChips('hb', HOURS);
   if ($('#qTake')) $('#qTake').innerHTML = facetChips('take', TAKES, v => takeTxt(v));
   const nb = (id, n) => { const b = $(id); if (!b) return; $('.qb', b).textContent = n || ''; b.classList.toggle('on', !!n); };
-  nb('#perBtn', f.per.length + (f.perFrom ? 1 : 0) + (f.perTo ? 1 : 0));
   nb('#tfBtn', f.tf.length + f.hb.length + f.take.length);
 }
 
@@ -772,7 +771,7 @@ function renderLib() {
   $('#main').classList.add('lib-fill');   // a pagina nao rola; so a lista
   $('#main').innerHTML = `
     <section class="page-head rise">
-      <div class="ph-text"><div class="eyebrow">${fav ? 'Sua seleção' : 'Pesquisa e análise'}</div><h1>${fav ? 'Favoritos' : 'Biblioteca de backtests'}</h1><p>${fav ? 'Os testes marcados com estrela, com os mesmos filtros e visualizações.' : 'Explore resultados. Compare configurações. Encontre padrões.'}</p></div>
+      <div class="ph-text"><h1>${fav ? 'Favoritos' : 'Biblioteca de backtests'}</h1><p>${fav ? 'Os testes marcados com estrela, no período e filtros atuais.' : 'Resultados do período selecionado'}</p></div>
       <div class="ph-tools">
         <div class="search">${ICON.search}<input id="fq" type="search" placeholder="Buscar estratégia, ativo ou relatório…" value="${esc(S.filters.q)}" autocomplete="off" aria-label="Buscar backtests">
           <span class="search-tools">${pop('searchHelp', 'Como a busca funciona', `<p><b>O que é pesquisado:</b> nome do relatório, ativo, timeframe, horário, dias operados, robô, período e pasta.</p><p><b>Várias palavras:</b> todas precisam aparecer (<code>xauusd brdom</code>).</p><p><b>Excluir:</b> <code>-palavra</code> remove quem tem a palavra.</p><p><b>Atalho:</b> tecla <kbd>/</kbd> foca a busca de qualquer tela.</p>`, 'rt')}<kbd>/</kbd></span></div>
@@ -781,21 +780,17 @@ function renderLib() {
     </section>
     <section class="kpi-strip rise" id="kpis"></section>
     <section class="filter-row rise">
+      <div class="filter-left"><button class="btn outline" id="sideBtn" aria-controls="side"></button><div class="active-chips" id="activeChips"></div><div class="menu-wrap"><button class="btn outline qbtn" id="tfBtn" aria-haspopup="true">${ICON.tf}<span>Timeframe</span><i class="qb"></i>${ICON.chev}</button><div class="menu qf" id="tfMenu"></div></div></div>
       <div class="seg view-seg" id="viewSeg" role="tablist" aria-label="Visualização">
         <button data-view="table" role="tab">${ICON.table}<span>Tabela</span></button>
         <button data-view="heat" role="tab">${ICON.heat}<span>Mapa de calor</span></button>
       </div>
-      <button class="btn outline" id="sideBtn" aria-controls="side"></button>
-      <div class="active-chips" id="activeChips"></div>
-      <div class="menu-wrap"><button class="btn outline qbtn" id="perBtn" aria-haspopup="true">${ICON.cal}<span>Período</span><i class="qb"></i>${ICON.chev}</button><div class="menu qf" id="perMenu"></div></div>
-      <div class="menu-wrap"><button class="btn outline qbtn" id="tfBtn" aria-haspopup="true">${ICON.tf}<span>Timeframe</span><i class="qb"></i>${ICON.chev}</button><div class="menu qf" id="tfMenu"></div></div>
     </section>
-    <section class="lib-grid rise">
+    <section class="lib-grid rise ${S.previewOpen === false ? 'preview-hidden' : ''}">
       <div class="card results">
         <div class="res-head">
           <h2 id="status"></h2>
           <div class="res-tools">
-            <div class="menu-wrap"><button class="tool" id="sortBtn" aria-haspopup="true">${ICON.sort}<span>Ordenar:</span><b id="sortLbl"></b>${ICON.chev}</button><div class="menu" id="sortMenu" style="width:340px"></div></div>
             <div class="menu-wrap" id="colsWrap"><button class="tool" id="colsBtn" aria-haspopup="true">${ICON.cols}<span>Colunas</span></button><div class="menu" id="colsMenu" style="width:340px"></div></div>
             <div class="menu-wrap"><button class="tool" id="expBtn" aria-haspopup="true">${ICON.dl}<span>Exportar</span></button><div class="menu" id="expMenu"></div></div>
           </div>
@@ -810,7 +805,7 @@ function renderLib() {
   $('#fq').addEventListener('input', debounce(e => { f.q = e.target.value.trim(); changed(); }, 220));
   $('#viewSeg').onclick = e => { const b = e.target.closest('[data-view]'); if (!b) return; S.view = b.dataset.view; save(); renderLibBody(); };
   $('#sideBtn').onclick = () => setSide(!sideVisible());
-  $('#pvScrim').onclick = () => openPv(false);
+  $('#pvScrim').onclick = () => closePreview();
   // menus: abrir/fechar com o mesmo padrao
   const menu = (btnId, menuId, draw) => {
     const m = $('#' + menuId);
@@ -826,13 +821,6 @@ function renderLib() {
         <div class="seg" id="sortDir"><button data-dir="-1" class="${d < 0 ? 'on' : ''}">↓ Decrescente</button><button data-dir="1" class="${d > 0 ? 'on' : ''}">↑ Crescente</button></div></div>
       <p class="pop-p">Ordem atual: <b>${esc(S.sort.map(([k, d]) => `${sortLabel(k)} ${d > 0 ? '↑' : '↓'}`).join(' → '))}</b>. Clique num cabeçalho da tabela para ordenar; <b>Shift+clique</b> adiciona desempate.</p>`;
     $('#sortSel', m).onchange = e => { const x = e.target.value; S.sort = [[x, sortDefault(x)]]; S.preset = ''; save(); renderLibBody(); drawSort(m); };
-  };
-  const sortMenu = menu('sortBtn', 'sortMenu', drawSort);
-  sortMenu.onclick = e => {
-    e.stopPropagation();
-    const p = e.target.closest('[data-preset]'), dr = e.target.closest('[data-dir]');
-    if (p) { applyPreset(S.preset === p.dataset.preset ? '' : p.dataset.preset); drawSort(sortMenu); }
-    if (dr) { S.sort[0][1] = +dr.dataset.dir; S.preset = ''; save(); renderLibBody(); drawSort(sortMenu); }
   };
   // colunas + densidade
   const drawCols = m => {
@@ -888,7 +876,7 @@ function renderLib() {
     }
   };
   // filtros rapidos
-  for (const k of ['per', 'tf']) {
+  for (const k of ['tf']) {
     const m = menu(k + 'Btn', k + 'Menu', mm => { mm.innerHTML = quickMenu(k); });
     m.onclick = e => {
       e.stopPropagation();
@@ -917,7 +905,7 @@ function renderLib() {
   };
   $('#preview').onclick = e => {
     const id = S.focus;
-    if (e.target.closest('#pvClose')) { openPv(false); return; }
+    if (e.target.closest('#pvClose')) { closePreview(); return; }
     const fv = e.target.closest('[data-fav]'); if (fv) { toggleFav(id); syncRow(id); renderPreview(true); return; }
     const mb = e.target.closest('[data-menu]'); if (mb) { e.stopPropagation(); openRowMenu(mb); return; }
     if (e.target.closest('#pvCmp')) { if (toggleCmp(id) !== false) { syncRow(id); renderSelbar(); renderPreview(true); } }
@@ -953,21 +941,18 @@ function tween(el, key, to, fmt) {
   setTimeout(() => { if (el._tw === tok) { el._tw = null; el.textContent = fmt(to); } }, D + 80);   // garante o valor final mesmo sem quadros (aba em segundo plano)
 }
 function renderKpis(data) {
-  const pos = data.filter(r => r.pl > 0);
   const props = data.filter(propPass).length;
-  const all = data.length === ROWS.length && libMode === 'lib' && !timeActive();
+  const scope = timeActive() ? 'Recorte + filtros ativos' : 'Histórico completo + filtros ativos';
   const k = (ic, tone, l, sub, extra = '') => `<div class="kpi"><span class="kpi-ic ${tone}">${ic}</span><div class="kpi-t"><span class="kpi-l">${l}</span><strong>—</strong><em title="${esc(sub)}">${esc(sub)}</em></div>${extra}</div>`;
   const el = $('#kpis');
   el.innerHTML =
-    k(ICON.doc, '', libMode === 'fav' ? 'Favoritos no filtro' : all ? 'Backtests na biblioteca' : timeActive() ? 'Backtests com dados no recorte' : 'Backtests no filtro', all ? 'sem filtros aplicados' : timeActive() ? timeText() : `de ${nf(libMode === 'fav' ? favs.size : ROWS.length, 0)} ${libMode === 'fav' ? 'favoritos' : 'relatórios'}`) +
-    k(ICON.bars, 'pos', 'Testes lucrativos', `${nf(pos.length, 0)} resultados positivos`) +
-    k(ICON.pie, '', 'Profit Factor mediano', `DD equity do pico mediano ${pct(median(data.map(r => r.dde)))}`) +
-    k(ICON.target, 'gold', 'Dentro do critério prop', `meta ${nf(PROP.target, 0)}% · diária ${nf(PROP.daily, 0)}% · total ${nf(PROP.total, 0)}%`, `<div class="kpi-act"><button class="link-btn" data-open-prop>Ver critério ${ICON.arrow}</button></div>`);
+    k(ICON.doc, '', 'Resultados filtrados', scope) +
+    k(ICON.pie, '', 'Profit Factor mediano', scope) +
+    k(ICON.target, 'gold', 'Dentro do critério prop', `${scope} · meta ${nf(PROP.target, 0)}% · diária ${nf(PROP.daily, 0)}% · total ${nf(PROP.total, 0)}%`, `<div class="kpi-act"><button class="link-btn" data-open-prop>Ver critério ${ICON.arrow}</button></div>`);
   const st = $$('strong', el);
   tween(st[0], 'n', data.length, v => nf(Math.round(v), 0));
-  tween(st[1], 'pos', data.length ? pos.length / data.length * 100 : null, v => pct(v, 0));
-  tween(st[2], 'pf', median(data.map(r => r.pf)), v => nf(v));
-  tween(st[3], 'prop', props, v => nf(Math.round(v), 0));
+  tween(st[1], 'pf', median(data.map(r => r.pf)), v => nf(v));
+  tween(st[2], 'prop', props, v => nf(Math.round(v), 0));
 }
 
 function renderActiveChips() {
@@ -988,6 +973,7 @@ function renderActiveChips() {
 }
 
 function renderSortControls() {
+  if (!$('#sortLbl') || !$('#sortBtn')) return;
   const [k, d] = S.sort[0];
   const p = PRESETS.find(x => x.id === S.preset);
   $('#sortLbl').textContent = p ? p.l : `${M[k]?.h || sortLabel(k)} ${d > 0 ? '↑' : '↓'}`;
@@ -1010,8 +996,14 @@ function renderLibBody() {
   $('#colsWrap').hidden = S.view !== 'table';
   $('#status').innerHTML = `<b>${nf(data.length, 0)}</b> resultado${data.length === 1 ? '' : 's'}`;
   const body = $('#libBody');
-  if (!data.some(r => r.id === S.focus)) S.focus = data[0]?.id || null;
-  renderPreview();
+  const focusedStillVisible = data.some(r => r.id === S.focus);
+  if (S.focus && !focusedStillVisible) {
+    S.focus = null; S.previewOpen = false; save();
+    $('.lib-grid')?.classList.add('preview-hidden');
+    disposePv();
+  }
+  if (!S.focus && data.length && S.previewOpen !== false) S.focus = data[0].id;
+  if (S.previewOpen !== false) renderPreview();
   if (!ROWS.length) { body.innerHTML = `<div class="empty"><h3>A biblioteca está vazia</h3>Nenhum relatório foi encontrado no índice. Rode <b>Atualizar-Painel.cmd</b> depois de organizar os backtests.</div>`; return; }
   if (!data.length) {
     body.innerHTML = libMode === 'fav' && !favs.size
@@ -1168,8 +1160,13 @@ function openPv(show) {
   document.body.classList.toggle('lock', show && narrow());
   if (show && pvChart) setTimeout(() => pvChart && pvChart.resize(), 340);
 }
+function closePreview() {
+  if (narrow()) { openPv(false); return; }
+  S.previewOpen = false; save(); renderLib();
+}
 function setFocus(id, open) {
   S.focus = id;
+  if (S.previewOpen === false) { S.previewOpen = true; save(); renderLib(); return; }
   $$('#libBody tr[data-id]').forEach(tr => tr.classList.toggle('focus', tr.dataset.id === id));
   renderPreview();
   if (open && narrow()) openPv(true);
@@ -1186,12 +1183,13 @@ function renderPreview(force) {
   const keepChart = same && pvChart;
   const chartEl = keepChart ? $('#pvChart') : null;
   el.innerHTML = `<div class="${same ? '' : 'pv-in'}">
-    <div class="pv-top"><span class="eyebrow">Backtest selecionado</span><button class="x pv-close" id="pvClose" aria-label="Fechar prévia">×</button></div>
+    <div class="pv-top"><span class="eyebrow">Prévia aberta</span><button class="x pv-close" id="pvClose" aria-label="Fechar prévia" title="Fechar prévia">×</button></div>
     <div class="pv-head"><h2 title="Relatório: ${esc(r.name)}">${esc(r.dn)}</h2><button class="star ${fv ? 'on' : ''}" data-fav="${r.id}" aria-pressed="${fv}" title="${fv ? 'Remover dos favoritos' : 'Favoritar'}">${ICON.star}</button><button class="dots" data-menu="${r.id}" aria-label="Mais ações" aria-haspopup="true">${ICON.dots}</button></div>
     <div class="pv-cfg">${esc(r.a)}<i>/</i>${esc(r.tf)}${r.hb ? `<i>/</i>${esc(r.hb)} Brasília` : ''}</div>
     ${cfgLine(r)}
+    <div class="pv-ret-label">Retorno no período</div>
     <div class="pv-ret ${cls(r.plp)}">${sgn(r.plp, 2, '%')}</div>
-    <div class="pv-sub">Retorno no período · ${money(r.pl)} sobre ${money(r.cap, 0)}</div>
+    <div class="pv-sub">Lucro líquido no período: ${money(r.pl)} · base: ${money(r._window ? r.windowBase : r.cap, 0)}</div>
     <div class="pv-ch"><h3>Curva de capital</h3><a class="icon-btn sm" href="#/t/${r.id}" title="Abrir análise completa" aria-label="Abrir análise completa">${ICON.expand}</a></div>
     <div class="pv-chart" id="pvChart">${keepChart ? '' : '<div class="skel"></div>'}</div>
     <div class="pv-stats">
