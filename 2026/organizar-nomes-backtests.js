@@ -61,7 +61,9 @@ function sourceFrom(collection) {
   const key = String(collection || '').toLowerCase();
   if (key.includes('daniel')) return 'Daniel';
   if (key.includes('exploracao codex')) return 'Codex';
-  if (key.includes('achei')) return 'Referencia';
+  // A coleção "Achei interessante" reúne os testes feitos e salvos
+  // manualmente pelo Janderson; a autoria deve aparecer primeiro no nome.
+  if (key.includes('achei')) return 'Janderson';
   return 'Fimathe';
 }
 function periodFrom(row) {
@@ -137,10 +139,14 @@ for (const assetDir of fs.readdirSync(ROOT, { withFileTypes: true }).filter(d =>
       const p = paramsFrom(html);
       const inferredCollection = /daniel/i.test(testDir.name) ? 'Daniel' : /^F48/i.test(testDir.name.replace(/^\d+__[^_]+__[^_]+__/, '')) ? 'Exploracao Codex 48.5' : 'Estudos Fimathe';
       const row = { Ativo: assetDir.name, Timeframe: tfDir.name, HoraMarcacaoBrasil: p.HorariosOperacionais === '3' ? '21h' : p.HorariosOperacionais === '0' ? '19h' : 'horario-nao-informado', Periodo: periodFromHtml(html), Colecao: inferredCollection };
-      const id = crypto.createHash('sha1').update(`${source}|${reportName}`).digest('hex').slice(0, 8);
+       // Pastas ainda fora do índice não possuem uma chave CSV estável. Depois
+       // da primeira padronização, preserve o id que já está no nome para que
+       // uma nova execução do organizador não as renomeie outra vez.
+       const existingId = testDir.name.match(/ - ([a-f0-9]{8})$/i)?.[1];
+       const id = existingId || crypto.createHash('sha1').update(`${source}|${reportName}`).digest('hex').slice(0, 8);
       const broker = brokerFrom(html), name = canonicalName(row, broker, p, id);
       const destination = path.join(ROOT, assetDir.name, tfDir.name, name);
-      if (destinationSet.has(destination.toLowerCase()) || fs.existsSync(destination)) throw new Error(`Colisão de nome não indexada: ${destination}`);
+       if (destinationSet.has(destination.toLowerCase()) || (fs.existsSync(destination) && path.resolve(source) !== path.resolve(destination))) throw new Error(`Colisão de nome não indexada: ${destination}`);
       const item = { id, origem: sourceFrom(row.Colecao), corretora: broker, ativo: row.Ativo, timeframe: row.Timeframe, antes: source, depois: destination, relatorioAntes: report, relatorioDepois: path.join(destination, reportName), nome: name, semIndice: true };
       plan.push(item); unindexed.push(item); sourceSet.add(source.toLowerCase()); destinationSet.add(destination.toLowerCase());
     }

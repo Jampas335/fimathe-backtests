@@ -14,7 +14,8 @@ Exemplo:
 
 Significado:
 
-- `(Origem)`: `Daniel`, `Codex`, `Fimathe` ou `Referencia`.
+- `(Origem)`: `Janderson`, `Daniel`, `Codex` ou `Fimathe`.
+  Os testes feitos e salvos manualmente pelo Janderson usam sempre `(Janderson)`.
 - `[Corretora]`: servidor/corretora lido no cabeçalho do relatório MT5. Quando o relatório não a informa, usa-se `[Corretora-nao-informada]`.
 - `C`: candles de formação; `CH`: canal mínimo em pontos; `TP`: alvo percentual do canal; `VM`: virada de mão; `PB`: pullback.
 - `R`: risco percentual por operação.
