@@ -915,6 +915,7 @@ function renderLib() {
 }
 function closeMenus(except) {
   $$('.menu.open').forEach(m => { if (m !== except) { m.classList.remove('open'); m.parentElement?.classList.remove('is-open'); } });
+  if (except?.id !== 'dataMenu') $('#genInfo')?.setAttribute('aria-expanded', 'false');
   $$('[data-pop][aria-expanded="true"]').forEach(b => b.nextElementSibling !== except && b.setAttribute('aria-expanded', 'false'));
 }
 // popovers de ajuda (botao "?")
@@ -1947,15 +1948,17 @@ function route() {
   return { name: 'lib' };
 }
 function renderCrumbs(r) {
+  const crumbs = $('#crumbs');
+  if (!crumbs) return;
   const home = `<a href="#/" class="hide-sm">${ICON.home}<span>Backtests</span></a><span class="sep hide-sm">/</span>`;
   const row = r.name === 'detail' ? BY_ID.get(r.id) : null;
-  $('#crumbs').innerHTML = home + (
+  crumbs.innerHTML = home + (
     r.name === 'cmp' ? '<b>Comparações</b>' :
     r.name === 'fav' ? '<b>Favoritos</b>' :
     r.name === 'detail' ? `<a href="#/">Biblioteca</a><span class="sep">/</span><b title="${esc(row?.name || '')}">${row ? `${esc(row.a)} ${esc(row.tf)} · ${esc(row.dn)}` : 'Backtest'}</b>` :
     '<b>Biblioteca</b>');
 }
-function closeNav() { $('#layout').classList.remove('nav-open'); $('#navScrim').classList.remove('open'); }
+function closeNav() { $('#layout')?.classList.remove('nav-open'); $('#navScrim')?.classList.remove('open'); }
 function go() {
   const r = route();
   disposeCharts(); disposePv(); pvShown = null;
@@ -2010,18 +2013,19 @@ function setTheme(t) {
 }
 $('#themeSeg').onclick = e => { const b = e.target.closest('[data-t]'); if (b) setTheme(b.dataset.t); };
 $$('#themeSeg button').forEach(b => b.classList.toggle('on', b.dataset.t === (document.documentElement.dataset.theme === 'light' ? 'light' : 'dark')));
-$('#navBtn').onclick = () => {
-  if (!matchMedia('(max-width:900px)').matches) { S.navMini = !S.navMini; save(); $('#layout').classList.toggle('nav-mini', S.navMini); setTimeout(() => { charts.forEach(c => c.resize()); if (pvChart) pvChart.resize(); }, 320); return; }
-  const open = !$('#layout').classList.contains('nav-open'); $('#layout').classList.toggle('nav-open', open); $('#navScrim').classList.toggle('open', open);
-};
-$('#layout').classList.toggle('nav-mini', !!S.navMini);
-$('#navScrim').onclick = closeNav;
 $('#sideScrim').onclick = () => setSide(false);
 const g = new Date(I.generated);
 const gTxt = `${g.toLocaleDateString('pt-BR')} ${g.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 $('#genInfo').textContent = `Dados atualizados · ${gTxt}`;
 $('#genInfo').title = `${nf(I.count, 0)} relatórios no índice`;
 $('#navData').innerHTML = `<b>${nf(I.count, 0)} relatórios</b>${ASSETS.length} ativos · ${TFS.length} timeframes<br>índice de ${gTxt}`;
+$('#genInfo').onclick = e => {
+  e.stopPropagation();
+  const menu = $('#dataMenu'), wrap = $('#dataWrap');
+  const open = !menu.classList.contains('open');
+  closeMenus(menu); menu.classList.toggle('open', open); wrap.classList.toggle('is-open', open);
+  e.currentTarget.setAttribute('aria-expanded', String(open));
+};
 updateCmpBadge();
 go();
 })();
