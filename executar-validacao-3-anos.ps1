@@ -1,6 +1,14 @@
 param(
-    [int]$MaxRuns = 20,
-    [switch]$Resume
+    # A rodada atual revalida somente os resultados promissores que começaram
+    # em 2026. Use -IncludeLongHistory apenas quando quiser reexecutar também
+    # estudos que já possuem a janela longa.
+    [int]$MaxRuns = 30,
+    [switch]$Resume,
+    [switch]$IncludeLongHistory,
+    # Revalida uma autoria específica sem deduplicar configurações. Útil para
+    # atualizar o próprio backtest do autor (por exemplo, Janderson), mesmo
+    # quando outro relatório tem inputs parecidos.
+    [string]$SomenteAutor = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,8 +18,9 @@ $Terminal = 'C:\Program Files\MetaTrader 5\terminal64.exe'
 $Profile = 'C:\Users\noobg\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075'
 $Root = 'E:\Area de Trabalho\Trade\Fimathe\Backtests'
 $IndexPath = Join-Path $Root '2026\00_Indice\indice-backtests-2026.csv'
-$WorkRoot = Join-Path $Root '2026\00_Indice\validacao-3-anos'
-$ConfigRoot = 'C:\FimatheRunConfigs\Validacao3Anos'
+$RunLabel = if ([string]::IsNullOrWhiteSpace($SomenteAutor)) { 'validacao-3-anos' } else { 'validacao-3-anos-' + ($SomenteAutor -replace '[^A-Za-z0-9_-]', '') }
+$WorkRoot = Join-Path $Root ('2026\00_Indice\' + $RunLabel)
+$ConfigRoot = Join-Path 'C:\FimatheRunConfigs' ($RunLabel -replace '[^A-Za-z0-9_-]', '')
 $EaSourceRoot = 'E:\Area de Trabalho\Trade\Fimathe\EA''s'
 $FromDate = '2023.11.01'
 $ToDate = '2026.10.31'
@@ -19,7 +28,8 @@ $Culture = [System.Globalization.CultureInfo]::InvariantCulture
 $Columns = @(
     'Colecao','Ativo','Timeframe','HoraServidor','HoraMarcacaoBrasil','Posicao','FaixaRisco','Score',
     'CapitalInicial','LucroLiquido','LucroPercentual','DrawdownCapitalInicialValor','DrawdownCapitalInicialPercent',
-    'DrawdownEquityPicoPercent','ProfitFactor','Trades','Periodo','PastaDestino','Relatorio','Origem','DataAdicao'
+    'DrawdownEquityPicoPercent','ProfitFactor','Trades','Periodo','PastaDestino','Relatorio','Origem','DataAdicao',
+    'Autor','Corretora','NomePadrao'
 )
 
 function Write-RunLog([string]$Text) {
@@ -102,8 +112,12 @@ function Get-EaFileName([pscustomobject]$Row) {
 function Assert-SafeEnvironment {
     if (-not (Test-Path -LiteralPath $Terminal)) { throw "Terminal autorizado nao encontrado: $Terminal" }
     if (-not (Test-Path -LiteralPath $Profile)) { throw "Perfil autorizado nao encontrado: $Profile" }
-    $running = @(Get-Process -Name terminal64 -ErrorAction SilentlyContinue)
-    if ($running.Count -gt 0) { throw 'Existe MetaTrader aberto. A bateria exige todos os terminais fechados para evitar qualquer risco de perfil incorreto.' }
+    # FTMO e Maven podem permanecer abertos. Esta checagem olha somente para
+    # uma eventual bateria anterior iniciada por este próprio script; nunca
+    # fecha, altera ou depende dos demais terminais.
+    $ownRun = @(Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match [regex]::Escape($ConfigRoot) })
+    if ($ownRun.Count -gt 0) { throw 'Ja existe uma bateria Fimathe em execucao no terminal isolado. Aguarde a conclusao antes de iniciar outra.' }
 }
 
 function Install-Ea([string]$EaFile) {
@@ -195,14 +209,33 @@ function Invoke-Validation([pscustomobject]$Candidate, [int]$Number) {
 New-Item -ItemType Directory -Force -Path $WorkRoot,$ConfigRoot | Out-Null
 Assert-SafeEnvironment
 $rows = @(Import-Csv -LiteralPath $IndexPath -Delimiter ';')
+# Indices antigos podem ainda nao ter as colunas de procedencia. Reconstrua
+# apenas a identificacao necessaria para preservar o vinculo entre os
+# relatorios manuais e suas entradas existentes; a organizacao final grava
+# essas colunas de forma permanente.
+foreach ($row in $rows) {
+    if ([string]::IsNullOrWhiteSpace($row.Autor) -and
+        (($row.Relatorio -match '\(Janderson\)') -or ($row.Colecao -eq 'Achei interessante'))) {
+        $row | Add-Member -NotePropertyName Autor -NotePropertyValue 'Janderson' -Force
+    }
+}
 $selected = @()
 $seen = @{}
 $candidates = $rows | ForEach-Object {
     $profit = Convert-Number $_.LucroPercentual
     $ddInitial = Convert-Number $_.DrawdownCapitalInicialPercent
     $ddEquity = Convert-Number $_.DrawdownEquityPicoPercent
-    [pscustomobject]@{ Row=$_; Profit=$profit; DDInitial=$ddInitial; DDEquity=$ddEquity; Quality=if($ddInitial -gt 0){$profit/[math]::Max($ddInitial,0.25)}else{-1} }
-} | Where-Object { $_.Profit -ge 45 -and $_.DDInitial -gt 0 -and $_.DDInitial -le 9 -and $_.DDEquity -le 12 } | Sort-Object @{Expression='Quality';Descending=$true},@{Expression='Profit';Descending=$true}
+    $periodStart = if ($_.Periodo -match '(\d{4}\.\d{2}\.\d{2})') { $Matches[1] } else { '' }
+    [pscustomobject]@{ Row=$_; Profit=$profit; DDInitial=$ddInitial; DDEquity=$ddEquity; PeriodStart=$periodStart; Quality=if($ddInitial -gt 0){$profit/[math]::Max($ddInitial,0.25)}else{-1} }
+} | Where-Object {
+    $_.Profit -ge 45 -and $_.DDInitial -gt 0 -and $_.DDInitial -le 9 -and
+    # O DD sobre o capital inicial e o limite prioritario de prop firm.
+    # Equity continua registrado, mas nao elimina uma validacao solicitada
+    # apenas por exceder esse segundo indicador.
+    ([string]::IsNullOrWhiteSpace($SomenteAutor) -or $_.DDEquity -le 12 -or $_.Row.Autor -eq $SomenteAutor) -and
+    ([string]::IsNullOrWhiteSpace($SomenteAutor) -or $_.Row.Autor -eq $SomenteAutor) -and
+    ($IncludeLongHistory -or $_.PeriodStart -ge '2026.01.01')
+} | Sort-Object @{Expression='Quality';Descending=$true},@{Expression='Profit';Descending=$true}
 
 foreach ($candidate in $candidates) {
     try {
@@ -210,7 +243,7 @@ foreach ($candidate in $candidates) {
         $setContent = Get-CandidateSet $candidate.Row
         $bytes = [Text.Encoding]::UTF8.GetBytes(($setContent -replace "`r?`n", "`n").Trim())
         $hash = ([System.Security.Cryptography.SHA256]::Create().ComputeHash($bytes) | ForEach-Object { $_.ToString('x2') }) -join ''
-        if ($seen.ContainsKey($hash)) { continue }
+        if ([string]::IsNullOrWhiteSpace($SomenteAutor) -and $seen.ContainsKey($hash)) { continue }
         $ea = Get-EaFileName $candidate.Row
         if (-not (Test-Path -LiteralPath (Join-Path $EaSourceRoot $ea)) -and -not (Test-Path -LiteralPath (Join-Path $Profile (Join-Path 'MQL5\Experts' $ea)))) { continue }
         $seen[$hash] = $true

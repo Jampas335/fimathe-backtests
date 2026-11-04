@@ -97,6 +97,10 @@ function canonicalName(row, broker, p, id) {
 
 if (!fs.existsSync(INDEX)) throw new Error(`Índice não encontrado: ${INDEX}`);
 const { headers, rows } = readCsv(INDEX);
+// Baterias antigas podem ter salvo o índice sem as colunas de proveniência.
+// Recrie-as antes de escrever, preservando a autoria/corretora na próxima
+// organização em vez de perder o padrão de nomes já adotado.
+for (const field of ['Autor', 'Corretora', 'NomePadrao']) if (!headers.includes(field)) headers.push(field);
 const plan = [];
 for (const row of rows) {
   const source = path.resolve(row.PastaDestino);
