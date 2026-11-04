@@ -318,22 +318,34 @@ function renderTimeScope() {
     M.dde.l = 'DD equity do pico %'; M.dde.h = 'DD do pico'; M.dde.long = 'DD equity do pico % — queda da equity a partir do maior valor anterior'; M.dde.tip = 'Maior queda da equity a partir do pico anterior (MT5: rebaixamento máximo do capital líquido). Inclui quedas depois de lucros.';
     RANGE_LABEL.ddb = 'DD capital inicial (%)'; RANGE_LABEL.dde = 'DD equity do pico (%)';
   }
-  const b = timeBounds(), min = TIME_MIN || b.from, max = TIME_MAX || b.to;
+  const min = inputTs(tsInput(TIME_MIN), false), max = inputTs(tsInput(TIME_MAX), false);
+  const current = { from: inputTs(S.time.from, false) ?? min, to: inputTs(S.time.to, false) ?? max };
   const presets = [['all', 'Tudo'], ['m1', '1M'], ['m3', '3M'], ['y1', '1A'], ['y2', '2A'], ['y3', '3A'], ['y5', '5A']];
+  const activePreset = presets.find(([k]) => {
+    if (k === 'all') return !timeActive() || (S.time.from === tsInput(min) && S.time.to === tsInput(max));
+    const p = presetDates(k); return p.from === S.time.from && p.to === S.time.to;
+  })?.[0] || '';
+  const years = []; for (let y = new Date(min * 1000).getUTCFullYear() + 1; Date.UTC(y, 0, 1) / 1000 < max; y++) years.push(Date.UTC(y, 0, 1) / 1000);
+  const markPct = t => (t - min) / Math.max(1, max - min) * 100;
   el.innerHTML = `<div class="time-scope-in">
-    <div class="time-scope-title"><span>${ICON.cal}</span><div><b>Janela de análise</b><small>${timeText()}</small></div></div>
-    <div class="time-presets" role="group" aria-label="Períodos rápidos">${presets.map(([k, l]) => `<button data-time-preset="${k}" class="${S.time.preset === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <div class="time-custom">
-      <label>De<input id="timeFrom" type="date" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.from || tsInput(min)}"></label>
-      <span>até</span>
-      <label>Até<input id="timeTo" type="date" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.to || tsInput(max)}"></label>
+    <div class="time-top">
+      <div class="time-scope-title"><span>${ICON.cal}</span><div><b>Período de análise</b><small>${timeActive() ? 'Recorte ativo' : 'Histórico completo'}</small></div></div>
+      <div class="time-presets" role="group" aria-label="Atalhos de período">${presets.map(([k, l]) => `<button data-time-preset="${k}" class="${activePreset === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+      <div class="time-custom">
+        <label class="time-field"><span>Início</span><span class="time-date"><input id="timeFrom" type="date" lang="pt-BR" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.from || tsInput(min)}"><i>${ICON.cal}</i></span></label>
+        <label class="time-field"><span>Fim</span><span class="time-date"><input id="timeTo" type="date" lang="pt-BR" min="${tsInput(min)}" max="${tsInput(max)}" value="${S.time.to || tsInput(max)}"><i>${ICON.cal}</i></span></label>
+      </div>
+      ${timeActive() ? '<button class="time-clear" id="timeClear">Limpar recorte</button>' : ''}
     </div>
-    <div class="time-slider" aria-label="Ajustar início e fim do período">
-      <div class="time-rail"></div><div class="time-fill" id="timeFill"></div>
-      <output class="time-tip" id="timeTipFrom" data-tip="from"></output><output class="time-tip" id="timeTipTo" data-tip="to"></output>
-      <input id="timeRangeFrom" type="range" min="${min}" max="${max}" step="86400" value="${b.from}"><input id="timeRangeTo" type="range" min="${min}" max="${max}" step="86400" value="${b.to}">
+    <div class="time-bottom">
+      <div class="time-slider" aria-label="Ajustar início e fim do período">
+        <div class="time-rail"></div><div class="time-fill" id="timeFill"></div><div class="time-years" aria-hidden="true">${years.map(t => `<i style="left:${markPct(t)}%"></i>`).join('')}</div>
+        <output class="time-tip" id="timeTipFrom"></output><output class="time-tip" id="timeTipTo"></output>
+        <input id="timeRangeFrom" type="range" min="${min}" max="${max}" step="86400" value="${current.from}"><input id="timeRangeTo" type="range" min="${min}" max="${max}" step="86400" value="${current.to}">
+        <span class="time-edge edge-from">${fmtDate(isoDay(min).replace(/-/g, '.'))}</span><span class="time-edge edge-to">${fmtDate(isoDay(max).replace(/-/g, '.'))}</span>
+      </div>
+      <p class="time-foot">As métricas consideram as operações fechadas no período selecionado.</p>
     </div>
-    <div class="time-foot"><span>${timeActive() ? 'Métricas recalculadas pelas operações fechadas no recorte.' : 'Exibindo os resultados completos de cada relatório.'}</span>${timeActive() ? '<button class="link-btn" id="timeClear">Limpar recorte</button>' : ''}</div>
   </div>`;
   const paint = () => {
     const a = +$('#timeRangeFrom').value, z = +$('#timeRangeTo').value, w = Math.max(1, max - min), pa = (a - min) / w * 100, pz = (z - min) / w * 100;
@@ -341,8 +353,9 @@ function renderTimeScope() {
     const fa = $('#timeTipFrom'), fz = $('#timeTipTo');
     fa.textContent = fmtDate(isoDay(a).replace(/-/g, '.')); fz.textContent = fmtDate(isoDay(z).replace(/-/g, '.'));
     fa.style.left = `${pa}%`; fz.style.left = `${pz}%`;
+    fa.classList.toggle('edge-left', pa < 8); fz.classList.toggle('edge-right', pz > 92);
   };
-  const apply = next => { S.time = next; periodMetricCache = new Map(); save(); go(); };
+  const apply = next => { if (next.from === tsInput(min) && next.to === tsInput(max)) next = presetDates('all'); S.time = next; periodMetricCache = new Map(); save(); go(); };
   el.onclick = e => { const p = e.target.closest('[data-time-preset]'); if (p) apply(presetDates(p.dataset.timePreset)); if (e.target.closest('#timeClear')) apply(presetDates('all')); };
   el.onchange = e => {
     if (e.target.id === 'timeFrom' || e.target.id === 'timeTo') {
@@ -350,21 +363,30 @@ function renderTimeScope() {
       apply({ preset: 'custom', from: from <= to ? from : to, to: from <= to ? to : from });
     }
   };
+  const snapYear = v => { const near = years.reduce((best, t) => Math.abs(t - v) < Math.abs(best - v) ? t : best, v); return Math.abs(near - v) <= 14 * 86400 ? near : v; };
   const slide = e => {
     const lo = $('#timeRangeFrom'), hi = $('#timeRangeTo');
+    e.target.value = snapYear(+e.target.value);
     if (e.target === lo && +lo.value > +hi.value) hi.value = lo.value;
     if (e.target === hi && +hi.value < +lo.value) lo.value = hi.value;
+    $('#timeFrom').value = tsInput(+lo.value); $('#timeTo').value = tsInput(+hi.value);
     paint();
   };
   const activateTip = which => { const sl = $('.time-slider', el); sl.classList.add('dragging'); $('#timeTipFrom').classList.toggle('active', which === 'from'); $('#timeTipTo').classList.toggle('active', which === 'to'); };
   const hideTips = () => { const sl = $('.time-slider', el); sl.classList.remove('dragging'); $$('.time-tip', sl).forEach(t => t.classList.remove('active')); };
   $('#timeRangeFrom').oninput = e => { activateTip('from'); slide(e); }; $('#timeRangeTo').oninput = e => { activateTip('to'); slide(e); };
   $('#timeRangeFrom').onpointerdown = () => activateTip('from'); $('#timeRangeTo').onpointerdown = () => activateTip('to');
+  $('#timeRangeFrom').onpointerenter = () => activateTip('from'); $('#timeRangeTo').onpointerenter = () => activateTip('to');
+  $('#timeRangeFrom').onfocus = () => activateTip('from'); $('#timeRangeTo').onfocus = () => activateTip('to');
   $('#timeRangeFrom').onpointerup = hideTips; $('#timeRangeTo').onpointerup = hideTips;
+  $('#timeRangeFrom').onpointerleave = hideTips; $('#timeRangeTo').onpointerleave = hideTips;
   $('#timeRangeFrom').onblur = hideTips; $('#timeRangeTo').onblur = hideTips;
   $('#timeRangeFrom').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
   $('#timeRangeTo').onchange = () => apply({ preset: 'custom', from: tsInput(+$('#timeRangeFrom').value), to: tsInput(+$('#timeRangeTo').value) });
   paint();
+  const syncHeight = () => document.documentElement.style.setProperty('--time-scope-h', `${el.offsetHeight}px`);
+  requestAnimationFrame(syncHeight);
+  if (!renderTimeScope._resize && 'ResizeObserver' in window) { renderTimeScope._resize = new ResizeObserver(syncHeight); renderTimeScope._resize.observe(el); }
 }
 
 // =====================================================================
