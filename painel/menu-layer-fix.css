@@ -1,0 +1,4 @@
+/* Camada de menus da biblioteca: os filtros precisam ficar sobre a tabela. */
+.filter-row:has(.menu-wrap.is-open),.res-head:has(.menu-wrap.is-open){position:relative;z-index:75}
+.filter-row .menu-wrap.is-open,.res-head .menu-wrap.is-open{z-index:76}
+.menu{z-index:90}
