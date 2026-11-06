@@ -190,7 +190,7 @@ kbd{font:500 11px var(--mono);color:var(--muted);background:var(--surface-2);bor
 
 /* menus e popovers */
 .menu-wrap{position:relative}
-.menu{position:absolute;right:0;top:calc(100% + 8px);z-index:50;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--radius);padding:6px;min-width:250px;max-height:min(520px,70vh);overflow:auto;box-shadow:var(--shadow-pop);visibility:hidden;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top right;transition:opacity .16s,transform .16s var(--ease),visibility .16s}
+.menu{position:absolute;right:0;top:calc(100% + 8px);z-index:90;background:var(--surface);border:1px solid var(--line-2);border-radius:var(--radius);padding:6px;min-width:250px;max-height:min(520px,70vh);overflow:auto;box-shadow:var(--shadow-pop);visibility:hidden;opacity:0;transform:translateY(-4px) scale(.98);transform-origin:top right;transition:opacity .16s,transform .16s var(--ease),visibility .16s}
 .menu.open{visibility:visible;opacity:1;transform:none}
 .menu.left{left:0;right:auto;transform-origin:top left}
 .menu.floating{position:fixed;width:260px;right:auto;top:0;z-index:90}
@@ -261,6 +261,8 @@ kbd{font:500 11px var(--mono);color:var(--muted);background:var(--surface-2);bor
 
 /* ---------- linha de filtros ---------- */
 .filter-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.filter-row:has(.menu-wrap.is-open),.res-head:has(.menu-wrap.is-open){position:relative;z-index:75}
+.filter-row .menu-wrap.is-open,.res-head .menu-wrap.is-open{z-index:76}
 .filter-left{display:flex;align-items:center;gap:10px;flex:1 1 520px;min-width:0;flex-wrap:wrap}
 .filter-row .btn{height:42px}
 #sideBtn .badge{margin-left:4px}

@@ -791,6 +791,7 @@ function renderLib() {
         <div class="res-head">
           <h2 id="status"></h2>
           <div class="res-tools">
+            <div class="menu-wrap" id="sortWrap"><button class="tool" id="sortBtn" aria-haspopup="true" aria-expanded="false">${ICON.sort}<span id="sortLbl">Ordenar</span>${ICON.chev}</button><div class="menu" id="sortMenu" style="width:340px"></div></div>
             <div class="menu-wrap" id="colsWrap"><button class="tool" id="colsBtn" aria-haspopup="true">${ICON.cols}<span>Colunas</span></button><div class="menu" id="colsMenu" style="width:340px"></div></div>
             <div class="menu-wrap"><button class="tool" id="expBtn" aria-haspopup="true">${ICON.dl}<span>Exportar</span></button><div class="menu" id="expMenu"></div></div>
           </div>
@@ -821,6 +822,19 @@ function renderLib() {
         <div class="seg" id="sortDir"><button data-dir="-1" class="${d < 0 ? 'on' : ''}">↓ Decrescente</button><button data-dir="1" class="${d > 0 ? 'on' : ''}">↑ Crescente</button></div></div>
       <p class="pop-p">Ordem atual: <b>${esc(S.sort.map(([k, d]) => `${sortLabel(k)} ${d > 0 ? '↑' : '↓'}`).join(' → '))}</b>. Clique num cabeçalho da tabela para ordenar; <b>Shift+clique</b> adiciona desempate.</p>`;
     $('#sortSel', m).onchange = e => { const x = e.target.value; S.sort = [[x, sortDefault(x)]]; S.preset = ''; save(); renderLibBody(); drawSort(m); };
+  };
+  const sortMenu = menu('sortBtn', 'sortMenu', drawSort);
+  sortMenu.onclick = e => {
+    e.stopPropagation();
+    const preset = e.target.closest('[data-preset]');
+    if (preset) { applyPreset(preset.dataset.preset); drawSort(sortMenu); return; }
+    const direction = e.target.closest('[data-dir]');
+    if (direction) {
+      const [key] = S.sort[0];
+      S.sort = [[key, +direction.dataset.dir]];
+      S.preset = '';
+      save(); renderLibBody(); drawSort(sortMenu);
+    }
   };
   // colunas + densidade
   const drawCols = m => {
