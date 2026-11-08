@@ -128,6 +128,7 @@ const ptsTxt = v => nf(v, 0) + ' pts';
 const takeTip = r => `TP ${nf(r.tpPct, 0)}% do canal (${nf(r.tpPct / 100)}× o risco)${r.virada ? ` · virada de mão: TP ${nf(r.tpRevPct, 0)}% = ${takeTxt(r.takeRev)}` : ' · sem virada de mão'}`;
 const fmtDate = s => s ? String(s).split('.').reverse().join('/') : '';
 const addedDate = t => isNum(t) ? new Date(t).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Data nao registrada';
+const addedShortDate = t => isNum(t) ? new Date(t).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'não registrada';
 for (const r of ROWS) {
   r.rdd = isNum(r.plp) && isNum(r.ddb) ? r.plp / Math.max(r.ddb, 0.25) : null;   // lucro por unidade de DD do capital base
   r.mpos = r.monthsTotal ? r.monthsPos / r.monthsTotal * 100 : null;
@@ -1049,7 +1050,19 @@ const cfgLine = r => (r.pts == null && r.take == null) ? '' : `<div class="cfg2"
 function cell(c, r, sp) {
   const v = r[c.k];
   switch (c.k) {
-    case 'name': return `<td class="c-name"><a class="tname ${r.dnEmpty ? 'noname' : ''}" href="#/t/${r.id}" title="${esc(r.dn)} — relatório: ${esc(r.name)}">${esc(r.dn)}</a><div class="tmeta" title="${esc([r.days, r._window ? (r.windowFrom ? `${r.windowFrom} → ${r.windowTo}` : 'Sem operações no recorte') : perLabel(r.perKey)].filter(Boolean).join(' · '))}">${[perShort(r), isNum(r.risk) ? 'risco ' + riskTxt(r.risk) : ''].filter(Boolean).map(esc).join('<i>•</i>')}</div></td>`;
+    case 'name': {
+      const meta = [
+        perShort(r),
+        isNum(r.risk) ? 'risco ' + riskTxt(r.risk) : '',
+        `adicionado em ${addedShortDate(r.added)}`,
+      ].filter(Boolean);
+      const metaTitle = [
+        r.days,
+        r._window ? (r.windowFrom ? `${r.windowFrom} → ${r.windowTo}` : 'Sem operações no recorte') : perLabel(r.perKey),
+        `Adicionado em ${addedDate(r.added)}`,
+      ].filter(Boolean).join(' · ');
+      return `<td class="c-name"><a class="tname ${r.dnEmpty ? 'noname' : ''}" href="#/t/${r.id}" title="${esc(r.dn)} — relatório: ${esc(r.name)}">${esc(r.dn)}</a><div class="tmeta" title="${esc(metaTitle)}">${meta.map(esc).join('<i>•</i>')}</div></td>`;
+    }
     case 'spark': return `<td>${sparkSvg(r.spark, sp[0], sp[1])}</td>`;
     case 'cfg': return `<td class="c-cfg"><div><span class="asset">${esc(r.a)}</span><span class="tag">${esc(r.tf)}</span>${r.hb ? `<span class="tag">${esc(r.hb)}</span>` : ''}</div>${cfgLine(r)}</td>`;
     case 'pts': return `<td class="n">${r.pts != null ? nf(r.pts, 0) : '—'}</td>`;
