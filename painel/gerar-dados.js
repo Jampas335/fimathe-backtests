@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, '..');                 // pasta Backtests
 const INDEX_CSV = path.join(ROOT, '2026', '00_Indice', 'indice-backtests-2026.csv');
 const OUT = path.join(__dirname, 'dados');
 const OUT_R = path.join(OUT, 'r');
+const OUT_S = path.join(OUT, 'sets');
 const OUT_PERIODS = path.join(OUT, 'periodos.js');
 
 // Parametros puramente visuais/diagnosticos nao entram no filtro de parametros.
@@ -145,7 +146,9 @@ function main() {
   if (!fs.existsSync(INDEX_CSV)) { console.error('Indice nao encontrado: ' + INDEX_CSV); process.exit(1); }
   const csv = readCsv(INDEX_CSV);
   fs.rmSync(OUT_R, { recursive: true, force: true });
+  fs.rmSync(OUT_S, { recursive: true, force: true });
   fs.mkdirSync(OUT_R, { recursive: true });
+  fs.mkdirSync(OUT_S, { recursive: true });
 
   const rows = [], paramValues = new Map(), errors = [];
   // Série compacta de fechamentos. Ela permite que o painel recalcule qualquer
@@ -158,6 +161,16 @@ function main() {
     const name = folderName.replace(/^\d+__DDB[^_]*__LP[^_]*__/, '');
     // ID estavel: a origem nao muda quando a biblioteca e reclassificada.
     const id = crypto.createHash('sha1').update((c.Origem || rel(folder)) + '|' + path.basename(report)).digest('hex').slice(0, 12);
+    const reportDir = path.dirname(report);
+    let setPath = null, setName = null;
+    try {
+      const setFile = fs.readdirSync(reportDir).find(f => /\.set$/i.test(f));
+      if (setFile) {
+        fs.copyFileSync(path.join(reportDir, setFile), path.join(OUT_S, `${id}.set`));
+        setPath = `painel/dados/sets/${id}.set`;
+        setName = setFile;
+      }
+    } catch { /* Relatorio sem pasta ou sem SET recuperavel. */ }
     const capital = brNum(c.CapitalInicial) || 10000;
     let rep = null;
     try { rep = parseReport(decode(fs.readFileSync(report))); }
@@ -184,7 +197,7 @@ function main() {
       score: brNum(c.Score), cap: capital, pl: brNum(c.LucroLiquido), plp: brNum(c.LucroPercentual),
       ddbv: brNum(c.DrawdownCapitalInicialValor), ddb: brNum(c.DrawdownCapitalInicialPercent), dde: brNum(c.DrawdownEquityPicoPercent),
       pf: brNum(c.ProfitFactor), tr: brNum(c.Trades), per: c.Periodo, from: perMatch ? perMatch[1] : null, to: perMatch ? perMatch[2] : null,
-      name, folder: rel(folder), report: rel(report), coll: c.Colecao,
+      name, folder: rel(folder), report: rel(report), set: setPath, setName, coll: c.Colecao,
       added: Number.isFinite(added) ? added : null,
       ea: rep ? rep.meta['Expert Advisor (Robô)'] || null : null,
       sharpe: mtNum(statOf(stats, /Sharpe/)), rf: mtNum(statOf(stats, /Fator de Recupera/)), payoff: mtNum(statOf(stats, /Retorno Esperado/)),

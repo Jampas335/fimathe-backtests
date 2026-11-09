@@ -1228,6 +1228,7 @@ function renderPreview(force) {
     </div>
     <div class="pv-acts">
       <a class="btn primary block" href="#/t/${r.id}">${ICON.ext}Abrir análise completa</a>
+      ${setDownload(r, 'btn outline block')}
       <button class="btn outline block ${inCmp ? 'on' : ''}" id="pvCmp">${inCmp ? `${ICON.check}Na comparação — remover` : `${ICON.bars}Adicionar à comparação`}</button>
     </div></div>`;
   if (keepChart) { $('#pvChart').replaceWith(chartEl); return; }
@@ -1267,6 +1268,7 @@ function openRowMenu(btn) {
     <button class="menu-it" data-ra="cmp">${cmp.includes(id) ? 'Remover da comparação' : 'Adicionar à comparação'}</button>
     <button class="menu-it" data-ra="fav">${favs.has(id) ? 'Desfavoritar' : 'Favoritar'}</button>
     <button class="menu-it" data-ra="copy">Copiar nome original</button>
+    ${setDownload(r, 'menu-it')}
     <a class="menu-it" href="${encodePath(r.report)}" target="_blank" rel="noopener">Abrir relatório MT5 original</a>
     <a class="menu-it" href="${encodePath(r.folder)}/" target="_blank" rel="noopener">Abrir pasta do teste</a>`;
   m.classList.add('open');
@@ -1287,6 +1289,11 @@ function copyText(t, msg = 'Nome copiado') {
   if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, () => fallback());
   else fallback();
   function fallback() { const ta = document.createElement('textarea'); ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch { toast('Não foi possível copiar'); } ta.remove(); }
+}
+function setDownload(r, className = 'btn outline') {
+  if (!r?.set) return '';
+  const filename = esc(r.setName || `${r.dn || r.id}.set`);
+  return `<a class="${className}" href="${encodePath(r.set)}" download="${filename}" title="Baixar arquivo de configuração SET">${ICON.dl}<span>Baixar SET</span></a>`;
 }
 
 function renderHeat(body, data) {
@@ -1429,7 +1436,9 @@ async function renderDetail(id) {
     <div class="d-actions">
       <button class="btn outline ${favs.has(id) ? 'on' : ''}" id="dFav" aria-pressed="${favs.has(id)}">★ ${favs.has(id) ? 'Favorito' : 'Favoritar'}</button>
       <button class="btn ${inCmp ? 'on' : 'primary'}" id="dCmp">${inCmp ? '✓ Na comparação' : '+ Adicionar à comparação'}</button>
+      ${setDownload(row, 'btn outline')}
       <div class="menu-wrap"><button class="btn outline sq" id="dMore" aria-haspopup="true" aria-label="Mais ações">${ICON.dots}</button><div class="menu" id="dMoreMenu">
+        ${setDownload(row, 'menu-it')}
         <a class="menu-it" href="${encodePath(row.report)}" target="_blank" rel="noopener">Abrir relatório MT5 original</a>
         <a class="menu-it" href="${encodePath(row.folder)}/" target="_blank" rel="noopener">Abrir pasta do teste</a>
         ${cmp.length ? `<a class="menu-it" href="#/comparar">Ir para a comparação (${cmp.length})</a>` : ''}

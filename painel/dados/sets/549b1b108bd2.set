@@ -1,0 +1,82 @@
+; saved on 2026.10.19 02:21:47
+; this file contains input parameters for testing/optimizing FimatheBot 46.0 expert advisor
+; to use it in the strategy tester, click Load in the context menu of the Inputs tab
+;
+; Horarios e Condicoes (HORARIO DA CORRETORA)
+MagicNumber=13579||13579||1||135790||N
+OperarTodaHora=false||false||0||true||N
+HorariosOperacionais=3
+UsarProximoCandleDisponivel=true||false||0||true||N
+CandlesParaFormacao=4||4||1||40||N
+TamanhoMinimoCanal_Pontos=1800
+PermitirMultiplasEntradas=true||false||0||true||N
+EncerrarTradeAnterior=false||false||0||true||N
+DistanciaMaxRompimento_Percent=50||50.0||5.000000||500.000000||N
+; Filtro de Dias da Semana (Brasil)
+UsarFiltroDiaSemana=true||false||0||true||N
+Operar_Domingo=false||false||0||true||N
+Operar_Segunda=true
+Operar_Terca=true
+Operar_Quarta=true
+Operar_Quinta=true
+Operar_Sexta=true
+Operar_Sabado=false||false||0||true||N
+; Estrategia de Reversao (Virada de Mao)
+UsarViradaDeMao=true
+MaxViradasDeMao=1||1||1||10||N
+TakeProfit_PercentualCanal_Reversao=193
+StopLoss_PercentualBuffer_Reversao=5||5.0||0.500000||50.000000||N
+; Metodo de Calculo do Candle (Marcacao do CA)
+MetodoCalculoCandle=2||0||0||2||N
+PercentualMaximoPavio=50.0||50.0||5.000000||500.000000||N
+; Entrada por Pullback (Opcional)
+UsarEntradaPullback=true
+DistanciaPullback_Percent=21
+ReativarCanalAposRompimentoInvalido=false||false||0||true||N
+; Recuperacao de Ciclo ao Anexar/Reiniciar
+RecuperarCicloAoIniciar=true||false||0||true||N
+AtivarEntradaRecuperada=true||false||0||true||N
+AtivarViradaRecuperada=true||false||0||true||N
+MaxBarrasSinalRecuperado=3||3||1||30||N
+BloquearRecuperacaoAmbigua=true||false||0||true||N
+; Gestao de Risco
+RiscoPorTrade_Percent=0.9
+LoteMinimoOperacional=0.008||0.008||0.000800||0.080000||N
+ArredondarLoteParaCima=true||false||0||true||N
+; Take Profit e Stop Loss (Padrao)
+TakeProfit_PercentualCanal=193
+StopLoss_PercentualBuffer=5||5.0||0.500000||50.000000||N
+ComentarioOrdens=Robo Fimathe
+; Metas Semanais (SEMANA DA CORRETORA)
+UseMetaSemanal=true||false||0||true||N
+MaxTradesGanho_Semana=3||8||1||80||N
+MaxTradesPerda_Semana=3||4||1||40||N
+IncluirLucroViradaMetaSemanal=true||false||0||true||N
+IncluirPerdaViradaMetaSemanal=true||false||0||true||N
+; Visualizacao no Grafico
+ExibirObjetosGraficos=false||false||0||true||N
+ManterObjetosAntigos=false||false||0||true||N
+CorCanalAbertura_CA=15570276
+CorCanalProjecao_C1=15570276
+CorCanalTakeProfit_C2=3329330
+CorGatilhoRompimento=55295
+CorLinhaStopLoss=255
+EstiloLinhaCanal=0||0||0||4||N
+LarguraLinhaCanal=2||2||1||20||N
+TamanhoLinhas_em_Candles=30||30||1||300||N
+QuantidadeCanaisProjecaoTake=1||1||1||10||N
+; Diagnostico e Logs
+HabilitarLogsDebug=false||false||0||true||N
+LogDetalhesCalculo=false||false||0||true||N
+ExibirResumoBacktest=true||false||0||true||N
+ExibirLogEstadoDetalhado=false||true||0||true||N
+UsarLimiteHorasSemRompimento=false
+LimiteHorasSemRompimento=7.0||7.0||0.5||48.0||N
+ModoGestaoVolume=0||0||0||1||N
+LoteFixo=0.01||0.01||0.01||100.0||N
+UsarGerenciamentoEmergencial=false
+CapitalBaseGerenciamento=10000.0||10000.0||100.0||1000000.0||N
+QuedaParaAtivarEmergencial_Percent=3.0||3.0||0.1||99.0||N
+MultiplicadorRiscoEmergencial=0.5||0.5||0.1||0.9||N
+ModoSaidaGestaoEmergencial=0||0||0||1||N
+

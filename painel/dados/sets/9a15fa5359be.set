@@ -1,0 +1,63 @@
+﻿; saved on 2026.08.09 12:45:52
+; this file contains input parameters for testing/optimizing FimatheBot 44.0 expert advisor
+; to use it in the strategy tester, click Load in the context menu of the Inputs tab
+;
+; Horarios e Condicoes (HORARIO DA CORRETORA)
+MagicNumber=13579||13579||1||135790||N
+OperarTodaHora=false||false||0||true||N
+HorariosOperacionais=0
+UsarProximoCandleDisponivel=true||false||0||true||N
+CandlesParaFormacao=4||4||1||40||N
+TamanhoMinimoCanal_Pontos=2700||700||1||7000||N
+PermitirMultiplasEntradas=true||false||0||true||N
+EncerrarTradeAnterior=false||false||0||true||N
+DistanciaMaxRompimento_Percent=53||50.0||5.000000||500.000000||N
+; Filtro de Dias da Semana (Brasil)
+UsarFiltroDiaSemana=true||false||0||true||N
+Operar_Domingo=false||false||0||true||N
+Operar_Segunda=true||false||0||true||N
+Operar_Terca=true||false||0||true||N
+Operar_Quarta=false||false||0||true||N
+Operar_Quinta=false||false||0||true||N
+Operar_Sexta=false||false||0||true||N
+Operar_Sabado=false||false||0||true||N
+; Estrategia de Reversao (Virada de Mao)
+UsarViradaDeMao=true||false||0||true||N
+MaxViradasDeMao=1||1||1||10||N
+TakeProfit_PercentualCanal_Reversao=93||195.0||19.500000||1950.000000||N
+StopLoss_PercentualBuffer_Reversao=5.0||5.0||0.500000||50.000000||N
+; Metodo de Calculo do Candle (Marcacao do CA)
+MetodoCalculoCandle=2||0||0||2||N
+PercentualMaximoPavio=50.0||50.0||5.000000||500.000000||N
+; Entrada por Pullback (Opcional)
+UsarEntradaPullback=true||false||0||true||N
+DistanciaPullback_Percent=19||20.0||2.000000||200.000000||N
+ReativarCanalAposRompimentoInvalido=false||false||0||true||N
+; Gestao de Risco
+RiscoPorTrade_Percent=1||1.0||0.100000||10.000000||N
+LoteMinimoOperacional=0.008||0.008||0.000800||0.080000||N
+ArredondarLoteParaCima=true||false||0||true||N
+; Take Profit e Stop Loss (Padrao)
+TakeProfit_PercentualCanal=93||90.0||9.000000||900.000000||N
+StopLoss_PercentualBuffer=5.0||5.0||0.500000||50.000000||N
+ComentarioOrdens=Robo Fimathe
+; Metas Semanais (SEMANA DA CORRETORA)
+UseMetaSemanal=false||false||0||true||N
+MaxTradesGanho_Semana=2||8||1||80||N
+MaxTradesPerda_Semana=3||4||1||40||N
+IncluirLucroViradaMetaSemanal=true||false||0||true||N
+IncluirPerdaViradaMetaSemanal=true||false||0||true||N
+; Visualizacao no Grafico
+ExibirObjetosGraficos=true||false||0||true||N
+ManterObjetosAntigos=true||false||0||true||N
+CorCanalAbertura_CA=15570276
+CorCanalProjecao_C1=15570276
+CorCanalTakeProfit_C2=3329330
+EstiloLinhaCanal=0||0||0||4||N
+LarguraLinhaCanal=2||2||1||20||N
+TamanhoLinhas_em_Candles=30||30||1||300||N
+QuantidadeCanaisProjecaoTake=1||1||1||10||N
+; Diagnostico e Logs
+HabilitarLogsDebug=false||false||0||true||N
+LogDetalhesCalculo=false||false||0||true||N
+ExibirResumoBacktest=true||false||0||true||N
