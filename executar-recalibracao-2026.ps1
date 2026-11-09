@@ -1,4 +1,7 @@
-param([switch]$Resume)
+param(
+    [switch]$Resume,
+    [switch]$Recovery
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -7,7 +10,7 @@ $Terminal = 'C:\Program Files\MetaTrader 5\terminal64.exe'
 $Profile = 'C:\Users\noobg\AppData\Roaming\MetaQuotes\Terminal\D0E8209F77C8CF37AD8BF550E51FF075'
 $Root = 'E:\Area de Trabalho\Trade\Fimathe\Backtests'
 $Index = Join-Path $Root '2026\00_Indice\indice-backtests-2026.csv'
-$RunLabel = 'rodada-recalibracao-2026'
+$RunLabel = if($Recovery) { 'rodada-protocolo-recuperacao' } else { 'rodada-recalibracao-2026' }
 $WorkRoot = Join-Path $Root "2026\00_Indice\$RunLabel"
 $ConfigRoot = Join-Path 'C:\FimatheRunConfigs' $RunLabel
 $EaSource = 'E:\Area de Trabalho\Trade\Fimathe\EA''s'
@@ -102,9 +105,10 @@ function Run-One([pscustomobject]$Variant,[string]$Scope,[string]$FromDate,[stri
     Set-Content -LiteralPath $setPath -Value $set -Encoding ascii
     Get-ChildItem -LiteralPath $Profile -Filter "$slug*" -File -ErrorAction SilentlyContinue | Remove-Item -Force
     $inputs = $set -split "`r?`n" | Where-Object { $_ -match '^[^;\s][^=]*=' }
+    $deposit = if($Variant.PSObject.Properties.Name -contains 'Deposit' -and $Variant.Deposit -gt 0) { [string]$Variant.Deposit } else { '10000' }
     $ini = @(
         '[Tester]', "Expert=$EaFile", 'Symbol=XAUUSD', 'Period=M15', 'Optimization=0', 'Model=0',
-        "FromDate=$FromDate", "ToDate=$ToDate", 'Deposit=10000', 'Currency=USD', 'Leverage=100',
+        "FromDate=$FromDate", "ToDate=$ToDate", "Deposit=$deposit", 'Currency=USD', 'Leverage=100',
         'ExecutionMode=255', 'Visual=0', "Report=$slug", 'ReplaceReport=1', 'ShutdownTerminal=1',
         'UseLocal=1', 'UseRemote=0', 'UseCloud=0', '', '[TesterInputs]'
     ) + $inputs
@@ -151,9 +155,29 @@ $variants = @(
     [pscustomobject]@{Id='BASE_ATUAL';Label='Controle: CH2200, TP193, PB21, sem alteracoes';Changes=@{}}
 )
 
+if($Recovery)
+{
+    # Simula uma conta cujo saldo fechado comecou em US$9.100, com capital-base de US$10.000.
+    # O risco efetivo emergencial e o produto de risco configurado x multiplicador.
+    $variants = @(
+        [pscustomobject]@{Id='GE025X04';Label='Recuperacao: risco efetivo 0,10% (0,25% x 0,4), retorno so na base';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.25';UsarGerenciamentoEmergencial='true';CapitalBaseGerenciamento='10000';QuedaParaAtivarEmergencial_Percent='2';MultiplicadorRiscoEmergencial='0.4';ModoSaidaGestaoEmergencial='0'}},
+        [pscustomobject]@{Id='GE030X05';Label='Recuperacao: risco efetivo 0,15% (0,30% x 0,5), retorno so na base';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.30';UsarGerenciamentoEmergencial='true';CapitalBaseGerenciamento='10000';QuedaParaAtivarEmergencial_Percent='2';MultiplicadorRiscoEmergencial='0.5';ModoSaidaGestaoEmergencial='0'}},
+        [pscustomobject]@{Id='GE040X05';Label='Recuperacao: risco efetivo 0,20% (0,40% x 0,5), retorno so na base';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.40';UsarGerenciamentoEmergencial='true';CapitalBaseGerenciamento='10000';QuedaParaAtivarEmergencial_Percent='2';MultiplicadorRiscoEmergencial='0.5';ModoSaidaGestaoEmergencial='0'}},
+        [pscustomobject]@{Id='SEMGE015';Label='Controle recuperacao: risco constante 0,15%, sem gestao emergencial';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.15';UsarGerenciamentoEmergencial='false'}},
+        [pscustomobject]@{Id='SEMGE020';Label='Controle recuperacao: risco constante 0,20%, sem gestao emergencial';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.20';UsarGerenciamentoEmergencial='false'}},
+        [pscustomobject]@{Id='R030_SEMVM';Label='Recuperacao: risco 0,30%, sem virada de mao';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.30';UsarGerenciamentoEmergencial='false';UsarViradaDeMao='false';MaxViradasDeMao='0'}},
+        [pscustomobject]@{Id='R040_SEMVM';Label='Recuperacao: risco 0,40%, sem virada de mao';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.40';UsarGerenciamentoEmergencial='false';UsarViradaDeMao='false';MaxViradasDeMao='0'}},
+        [pscustomobject]@{Id='R030_VM';Label='Controle recuperacao: risco 0,30%, com virada de mao';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.30';UsarGerenciamentoEmergencial='false';UsarViradaDeMao='true';MaxViradasDeMao='1'}},
+        [pscustomobject]@{Id='R030_SEMVM_FLOOR';Label='Recuperacao: risco 0,30%, sem virada, lote sempre para baixo';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.30';UsarGerenciamentoEmergencial='false';UsarViradaDeMao='false';MaxViradasDeMao='0';ArredondarLoteParaCima='false'}},
+        [pscustomobject]@{Id='R040_SEMVM_FLOOR';Label='Recuperacao: risco 0,40%, sem virada, lote sempre para baixo';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.40';UsarGerenciamentoEmergencial='false';UsarViradaDeMao='false';MaxViradasDeMao='0';ArredondarLoteParaCima='false'}},
+        [pscustomobject]@{Id='GE040X05_SEMVM_FLOOR';Label='Recuperacao emergencial: 0,20% efetivo, sem virada, lote para baixo';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.40';UsarGerenciamentoEmergencial='true';CapitalBaseGerenciamento='10000';QuedaParaAtivarEmergencial_Percent='2';MultiplicadorRiscoEmergencial='0.5';ModoSaidaGestaoEmergencial='0';UsarViradaDeMao='false';MaxViradasDeMao='0';ArredondarLoteParaCima='false'}},
+        [pscustomobject]@{Id='GE040X09_SEMVM_FLOOR';Label='Recuperacao emergencial: 0,36% efetivo, sem virada, lote para baixo';Deposit=9100;Changes=@{RiscoPorTrade_Percent='0.40';UsarGerenciamentoEmergencial='true';CapitalBaseGerenciamento='10000';QuedaParaAtivarEmergencial_Percent='2';MultiplicadorRiscoEmergencial='0.9';ModoSaidaGestaoEmergencial='0';UsarViradaDeMao='false';MaxViradasDeMao='0';ArredondarLoteParaCima='false'}}
+    )
+}
+
 @(
     '# Recalibracao 2026 -- XAUUSD M15 21h', '',
-    'Objetivo: comparar pequenas variacoes ao redor da configuracao CH2200 / TP193 / pullback 21 / risco 0,9%.',
+    $(if($Recovery){'Objetivo: simular a sobrevivencia de uma conta que inicia em US$9.100, com base de US$10.000 e gestao emergencial ativa imediatamente.'}else{'Objetivo: comparar pequenas variacoes ao redor da configuracao CH2200 / TP193 / pullback 21 / risco 0,9%.'}),
     'O ranking nao aceita retorno isolado. Cada variacao e executada em 2026 completo e no bloco recente agosto--outubro.',
     'O bloco agosto--outubro e uma verificacao de regime recente; nao e garantia de desempenho futuro.',
     'Nenhuma variacao eleva o risco por trade acima de 0,9%.'
